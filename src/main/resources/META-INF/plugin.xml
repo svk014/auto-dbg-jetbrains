@@ -9,7 +9,8 @@
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
-        <toolWindow factoryClass="com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory" id="MyToolWindow"/>
+        <toolWindow factoryClass="com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory" id="Auto DBG"/>
         <postStartupActivity implementation="com.github.svk014.autodbgjetbrains.startup.MyProjectActivity" />
+        <projectService serviceImplementation="com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService"/>
     </extensions>
 </idea-plugin>
