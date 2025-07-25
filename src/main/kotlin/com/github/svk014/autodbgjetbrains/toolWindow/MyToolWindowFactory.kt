@@ -1,7 +1,5 @@
 package com.github.svk014.autodbgjetbrains.toolWindow
 
-import com.github.svk014.autodbgjetbrains.services.MyProjectService
-import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
@@ -48,8 +46,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                 }
             }
         }
-
-        private val service = toolWindow.project.service<MyProjectService>()
 
         fun getContent() = JBPanel<JBPanel<*>>().apply {
             val logTextArea = JTextArea(10, 40).apply {
