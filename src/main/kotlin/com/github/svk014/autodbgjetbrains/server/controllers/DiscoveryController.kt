@@ -1,11 +1,11 @@
 package com.github.svk014.autodbgjetbrains.server.controllers
 
 import com.github.svk014.autodbgjetbrains.services.ApiDiscoveryService
-import com.github.svk014.autodbgjetbrains.server.controllers.DebuggerController
+import com.github.svk014.autodbgjetbrains.server.models.*
+import com.intellij.openapi.diagnostic.thisLogger
 import io.ktor.server.application.*
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
-import kotlin.reflect.full.createInstance
 
 /**
  * Controller for API discovery endpoints that automatically generates
@@ -17,92 +17,93 @@ class DiscoveryController {
 
     fun configureRoutes(routing: Routing) {
         routing {
-            // Discovery endpoint - automatically lists all available API endpoints as tools
-            get("/tools") {
-                try {
-                    // Discover endpoints from all controller classes
-                    val endpoints = apiDiscoveryService.discoverEndpoints(
-                        DebuggerController::class
-                        // Add other controller classes here as they are created
-                    )
-
-                    // Convert to the format expected by the client
-                    val toolsResponse = endpoints.map { endpoint ->
-                        mapOf(
-                            "name" to endpoint.name,
-                            "method" to endpoint.method,
-                            "path" to endpoint.path,
-                            "description" to endpoint.description,
-                            "parameters" to endpoint.parameters.map { param ->
-                                mapOf(
-                                    "name" to param.name,
-                                    "type" to param.type,
-                                    "required" to param.required,
-                                    "description" to param.description
-                                )
-                            },
-                            "returnType" to endpoint.returnType
+            route("/api/discovery") {
+                // Discovery endpoint - automatically lists all available API endpoints as tools
+                get("/tools") {
+                    try {
+                        // Discover endpoints from all controller classes
+                        val endpoints = apiDiscoveryService.discoverEndpoints(
+                            com.github.svk014.autodbgjetbrains.server.controllers.DebuggerController::class
                         )
+
+                        // Convert to proper serializable data classes
+                        val discoveredEndpoints = endpoints.map { endpoint ->
+                            DiscoveredEndpoint(
+                                name = endpoint.name,
+                                method = endpoint.method,
+                                path = endpoint.path,
+                                description = endpoint.description,
+                                parameters = endpoint.parameters.map { param ->
+                                    EndpointParameter(
+                                        name = param.name,
+                                        type = param.type,
+                                        required = param.required,
+                                        description = param.description
+                                    )
+                                },
+                                returnType = endpoint.returnType
+                            )
+                        }
+
+                        val response = ToolsResponse(
+                            tools = discoveredEndpoints,
+                            count = endpoints.size
+                        )
+
+                        call.respond(response)
+
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in /tools discovery endpoint", e)
+                        call.respond(ErrorResponse(
+                            error = "Failed to discover API endpoints",
+                            message = e.message ?: "Unknown error"
+                        ))
                     }
-
-                    call.respond(mapOf(
-                        "tools" to toolsResponse,
-                        "count" to endpoints.size,
-                        "generated_at" to System.currentTimeMillis()
-                    ))
-
-                } catch (e: Exception) {
-                    call.respond(mapOf(
-                        "error" to "Failed to discover API endpoints",
-                        "message" to (e.message ?: "Unknown error"),
-                        "tools" to emptyList<Any>()
-                    ))
                 }
-            }
 
-            // Health check endpoint
-            get("/health") {
-                call.respond(mapOf(
-                    "status" to "healthy",
-                    "timestamp" to System.currentTimeMillis(),
-                    "service" to "Auto-DBG API Discovery"
-                ))
-            }
+                // Health check endpoint
+                get("/health") {
+                    try {
+                        call.respond(HealthResponse(
+                            status = "healthy",
+                            service = "Auto-DBG API Discovery"
+                        ))
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in /health endpoint", e)
+                        call.respond(ErrorResponse(
+                            error = "Health check failed",
+                            message = e.message ?: "Unknown error"
+                        ))
+                    }
+                }
 
-            // API schema endpoint for more detailed information
-            get("/schema") {
-                try {
-                    val endpoints = apiDiscoveryService.discoverEndpoints(
-                        DebuggerController::class
-                    )
+                // API schema endpoint for more detailed information
+                get("/schema") {
+                    try {
+                        val endpoints = apiDiscoveryService.discoverEndpoints(
+                            com.github.svk014.autodbgjetbrains.server.controllers.DebuggerController::class
+                        )
 
-                    call.respond(mapOf(
-                        "openapi" to "3.0.0",
-                        "info" to mapOf(
-                            "title" to "Auto-DBG Debugger API",
-                            "version" to "1.0.0",
-                            "description" to "Automatically generated API documentation for debugger endpoints"
-                        ),
-                        "paths" to endpoints.associate { endpoint ->
+                        val paths = endpoints.associate { endpoint ->
                             endpoint.path to mapOf(
-                                endpoint.method.lowercase() to mapOf(
-                                    "summary" to endpoint.description,
-                                    "operationId" to endpoint.name,
-                                    "parameters" to endpoint.parameters.map { param ->
-                                        mapOf(
-                                            "name" to param.name,
-                                            "in" to if (endpoint.path.contains("{${param.name}}")) "path" else "query",
-                                            "required" to param.required,
-                                            "description" to param.description,
-                                            "schema" to mapOf("type" to param.type)
+                                endpoint.method.lowercase() to EndpointSpec(
+                                    summary = endpoint.description,
+                                    operationId = endpoint.name,
+                                    parameters = endpoint.parameters.map { param ->
+                                        OpenApiParameter(
+                                            name = param.name,
+                                            `in` = if (endpoint.path.contains("{${param.name}}")) "path" else "query",
+                                            required = param.required,
+                                            description = param.description,
+                                            schema = ParameterSchema(type = param.type)
                                         )
                                     },
-                                    "responses" to mapOf(
-                                        "200" to mapOf(
-                                            "description" to "Success",
-                                            "content" to mapOf(
-                                                "application/json" to mapOf(
-                                                    "schema" to mapOf("type" to endpoint.returnType)
+                                    responses = mapOf(
+                                        "200" to ResponseSpec(
+                                            description = "Success",
+                                            content = mapOf(
+                                                "application/json" to ContentSpec(
+                                                    schema = SchemaSpec(type = endpoint.returnType)
                                                 )
                                             )
                                         )
@@ -110,13 +111,26 @@ class DiscoveryController {
                                 )
                             )
                         }
-                    ))
 
-                } catch (e: Exception) {
-                    call.respond(mapOf(
-                        "error" to "Failed to generate API schema",
-                        "message" to (e.message ?: "Unknown error")
-                    ))
+                        val response = OpenApiResponse(
+                            openapi = "3.0.0",
+                            info = ApiInfo(
+                                title = "Auto-DBG Debugger API",
+                                version = "1.0.0",
+                                description = "Automatically generated API documentation for debugger endpoints"
+                            ),
+                            paths = paths
+                        )
+
+                        call.respond(response)
+
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in /schema endpoint", e)
+                        call.respond(ErrorResponse(
+                            error = "Failed to generate API schema",
+                            message = e.message ?: "Unknown error"
+                        ))
+                    }
                 }
             }
         }

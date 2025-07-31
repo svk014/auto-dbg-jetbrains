@@ -2,8 +2,8 @@ package com.github.svk014.autodbgjetbrains.services
 
 import com.github.svk014.autodbgjetbrains.annotations.ApiEndpoint
 import com.github.svk014.autodbgjetbrains.annotations.ApiParam
-import com.github.svk014.autodbgjetbrains.models.ApiEndpointInfo
-import com.github.svk014.autodbgjetbrains.models.ApiParameterInfo
+import com.github.svk014.autodbgjetbrains.server.models.ApiEndpointInfo
+import com.github.svk014.autodbgjetbrains.server.models.ApiParameterInfo
 import kotlin.reflect.KClass
 import kotlin.reflect.KFunction
 import kotlin.reflect.full.declaredMemberFunctions

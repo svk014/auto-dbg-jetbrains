@@ -4,7 +4,10 @@ import com.github.svk014.autodbgjetbrains.annotations.ApiEndpoint
 import com.github.svk014.autodbgjetbrains.annotations.ApiParam
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.server.models.ApiResponse
+import com.github.svk014.autodbgjetbrains.server.models.OperationResult
+import com.github.svk014.autodbgjetbrains.server.models.BreakpointInfo
 import com.intellij.openapi.components.service
+import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import io.ktor.http.*
 import io.ktor.server.application.*
@@ -38,6 +41,7 @@ class DebuggerController(private val project: Project) {
                             )
                         }
                     } catch (e: Exception) {
+                        thisLogger().error("Error in /frame/{depth} endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
                             ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
@@ -52,6 +56,7 @@ class DebuggerController(private val project: Project) {
                         val result = getCallStack(maxDepth)
                         call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
                     } catch (e: Exception) {
+                        thisLogger().error("Error in /callstack endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
                             ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
@@ -67,6 +72,7 @@ class DebuggerController(private val project: Project) {
                         val result = getVariables(frameId, maxDepth)
                         call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
                     } catch (e: Exception) {
+                        thisLogger().error("Error in /variables endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
                             ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
@@ -86,6 +92,7 @@ class DebuggerController(private val project: Project) {
                         val result = setVariable(variableName, value, frameDepth)
                         call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
                     } catch (e: Exception) {
+                        thisLogger().error("Error in /variable/set endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
                             ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
@@ -102,6 +109,7 @@ class DebuggerController(private val project: Project) {
                         val result = setBreakpoint(filePath, lineNumber, condition)
                         call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
                     } catch (e: Exception) {
+                        thisLogger().error("Error in /breakpoint endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
                             ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
@@ -182,14 +190,16 @@ class DebuggerController(private val project: Project) {
             type = "integer",
             required = false
         ) frameDepth: Int = 0
-    ): Map<String, Any> {
+    ): OperationResult {
         // TODO: Implement variable setting in DebuggerIntegrationService
-        return mapOf(
-            "success" to true,
-            "variable" to variableName,
-            "newValue" to value,
-            "frameDepth" to frameDepth,
-            "message" to "Variable setting not yet implemented"
+        return OperationResult(
+            success = true,
+            message = "Variable setting not yet implemented",
+            details = mapOf(
+                "variable" to variableName,
+                "newValue" to value,
+                "frameDepth" to frameDepth.toString()
+            )
         )
     }
 
@@ -214,14 +224,14 @@ class DebuggerController(private val project: Project) {
             type = "string",
             required = false
         ) condition: String? = null
-    ): Map<String, Any> {
+    ): BreakpointInfo {
         // TODO: Implement breakpoint setting in DebuggerIntegrationService
-        return mapOf(
-            "success" to true,
-            "filePath" to filePath,
-            "lineNumber" to lineNumber,
-            "condition" to (condition ?: "none"),
-            "message" to "Breakpoint setting not yet implemented"
+        return BreakpointInfo(
+            success = true,
+            filePath = filePath,
+            lineNumber = lineNumber,
+            condition = condition,
+            message = "Breakpoint setting not yet implemented"
         )
     }
 }
