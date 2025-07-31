@@ -4,8 +4,8 @@ import com.github.svk014.autodbgjetbrains.annotations.ApiEndpoint
 import com.github.svk014.autodbgjetbrains.annotations.ApiParam
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.server.models.ApiResponse
-import com.github.svk014.autodbgjetbrains.server.models.OperationResult
 import com.github.svk014.autodbgjetbrains.server.models.BreakpointInfo
+import com.github.svk014.autodbgjetbrains.server.models.OperationResult
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -37,7 +37,7 @@ class DebuggerController(private val project: Project) {
                         } else {
                             call.respond(
                                 HttpStatusCode.NotFound,
-                                ApiResponse<Any>(success = false, error = "Frame not found at depth $depth")
+                                ApiResponse(success = false, data = null, error = "Frame not found at depth $depth")
                             )
                         }
                     } catch (e: Exception) {

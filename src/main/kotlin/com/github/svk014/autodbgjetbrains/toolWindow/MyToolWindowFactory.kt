@@ -1,6 +1,7 @@
 package com.github.svk014.autodbgjetbrains.toolWindow
 
 import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
+import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -8,7 +9,6 @@ import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
-import com.intellij.xdebugger.XDebuggerManager
 import java.awt.BorderLayout
 import java.awt.GridLayout
 import javax.swing.*
@@ -48,6 +48,8 @@ class MyToolWindowFactory : ToolWindowFactory {
             }
         }
 
+        private val debuggerService = toolWindow.project.service<DebuggerIntegrationService>()
+
         fun getContent() = JBPanel<JBPanel<*>>().apply {
             layout = BorderLayout()
 
@@ -71,7 +73,8 @@ class MyToolWindowFactory : ToolWindowFactory {
                                     serverStatusLabel.text = "Status: Running (Port: ${apiServer.getServerPort()})"
                                     serverUrlLabel.text = "URL: ${apiServer.getServerUrl()}"
                                     isEnabled = false
-                                    this@apply.parent.components.find { it is JButton && it.text == "Stop Server" }?.isEnabled = true
+                                    // Find the stop button in the parent panel and enable it
+                                    (parent as JPanel).components.find { it is JButton && it.text == "Stop Server" }?.isEnabled = true
                                 }
                             }
                         }.apply { isRepeats = false }.start()
@@ -113,21 +116,15 @@ class MyToolWindowFactory : ToolWindowFactory {
                 border = BorderFactory.createTitledBorder("Debug Session Control")
 
                 val sessionDropdown = JComboBox<String>()
-                var sessionMap = emptyMap<String, com.intellij.xdebugger.XDebugSession>()
 
                 val refreshButton = JButton("Refresh Debug Sessions").apply {
                     addActionListener {
-                        val sessions = XDebuggerManager.getInstance(toolWindow.project).debugSessions
-                        sessionDropdown.removeAllItems()
-                        sessionMap = sessions.associateBy { it.sessionName }
-                        if (sessions.isEmpty()) {
-                            appendLog("[Auto DBG] No active debug sessions.")
+                        val sessionNames = debuggerService.refreshAndGetActiveSessionNames()
+                        sessionDropdown.model = DefaultComboBoxModel(sessionNames.toTypedArray())
+                        if (sessionNames.isNotEmpty()) {
+                            appendLog("[Auto DBG] Found active sessions. Please select one and connect.")
                         } else {
-                            appendLog("[Auto DBG] Active debug sessions:")
-                            sessions.forEach { session ->
-                                appendLog("- ${session.sessionName} | Type: ${session.javaClass.name}")
-                                sessionDropdown.addItem(session.sessionName)
-                            }
+                            appendLog("[Auto DBG] No active debug sessions found.")
                         }
                     }
                 }
@@ -135,25 +132,25 @@ class MyToolWindowFactory : ToolWindowFactory {
                 val connectButton = JButton("Connect").apply {
                     addActionListener {
                         val selectedSessionName = sessionDropdown.selectedItem as? String
-                        val selectedSession = sessionMap[selectedSessionName]
-                        if (selectedSession != null) {
-                            appendLog("[Auto DBG] Connected to session: $selectedSessionName")
-                            if (!selectedSession.isPaused) {
-                                selectedSession.pause()
-                                appendLog("[Auto DBG] Sent pause command to: $selectedSessionName")
-                            } else {
-                                appendLog("[Auto DBG] Session already paused: $selectedSessionName")
-                            }
+                        if (selectedSessionName != null) {
+                            debuggerService.connectToSession(selectedSessionName)
                         } else {
-                            appendLog("[Auto DBG] No session selected to connect.")
+                            appendLog("[Auto DBG] Error: No session selected.")
                         }
+                    }
+                }
+
+                val pauseButton = JButton("Pause").apply {
+                    addActionListener {
+                        // The service already knows which session is connected.
+                        debuggerService.pauseCurrentSession()
                     }
                 }
 
                 add(refreshButton)
                 add(sessionDropdown)
                 add(connectButton)
-                add(JPanel()) // Empty panel for layout
+                add(pauseButton)
             }
 
             // Create log panel

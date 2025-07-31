@@ -5,6 +5,7 @@ import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.frame.XStackFrame
+import com.intellij.debugger.engine.JavaStackFrame
 
 /**
  * Java-specific implementation for retrieving stack frame information
@@ -25,7 +26,9 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
             val frames = mutableListOf<XStackFrame>()
             activeExecutionStack.computeStackFrames(0, object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
                 override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
-                    frames.addAll(stackFrames)
+                    // Filter for Java frames only
+                    val javaFrames = stackFrames.filterIsInstance<JavaStackFrame>()
+                    frames.addAll(javaFrames)
                 }
 
                 override fun errorOccurred(errorMessage: String) {
@@ -33,13 +36,13 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
                 }
             })
 
-            // Return the frame at the specified depth
+            // Return the Java frame at the specified depth
             if (depth < frames.size) {
-                val frame = frames[depth]
+                val frame = frames[depth] as JavaStackFrame
                 val sourcePosition = frame.sourcePosition
 
                 FrameInfo(
-                    methodName = extractMethodName(frame),
+                    methodName = frame.descriptor.method?.name() ?: "Unknown Method",
                     lineNumber = sourcePosition?.line ?: -1,
                     filePath = sourcePosition?.file?.path ?: "Unknown"
                 )
@@ -51,28 +54,5 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
             null
         }
     }
-
-    /**
-     * Extract method name from stack frame
-     */
-    private fun extractMethodName(frame: XStackFrame): String {
-        return try {
-            // Try to get method name from the frame's string representation
-            val frameString = frame.toString()
-
-            // Parse method name from frame string (format may vary)
-            when {
-                frameString.contains("at ") -> {
-                    val methodPart = frameString.substringAfter("at ").substringBefore("(")
-                    methodPart.substringAfterLast(".")
-                }
-                frameString.contains("::") -> {
-                    frameString.substringAfter("::").substringBefore("(")
-                }
-                else -> "Unknown Method"
-            }
-        } catch (e: Exception) {
-            "Unknown Method"
-        }
-    }
 }
+
