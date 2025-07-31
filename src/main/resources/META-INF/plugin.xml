@@ -5,6 +5,7 @@
     <vendor>svk014</vendor>
 
     <depends>com.intellij.modules.platform</depends>
+    <depends option="true">com.intellij.java</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 

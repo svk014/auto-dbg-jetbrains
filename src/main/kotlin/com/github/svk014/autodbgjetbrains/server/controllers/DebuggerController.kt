@@ -37,14 +37,14 @@ class DebuggerController(private val project: Project) {
                         } else {
                             call.respond(
                                 HttpStatusCode.NotFound,
-                                ApiResponse(success = false, data = null, error = "Frame not found at depth $depth")
+                                ApiResponse<String>(success = false, error = "Frame not found at depth $depth")
                             )
                         }
                     } catch (e: Exception) {
                         thisLogger().error("Error in /frame/{depth} endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
                         )
                     }
                 }
@@ -59,7 +59,7 @@ class DebuggerController(private val project: Project) {
                         thisLogger().error("Error in /callstack endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
                         )
                     }
                 }
@@ -75,7 +75,7 @@ class DebuggerController(private val project: Project) {
                         thisLogger().error("Error in /variables endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
                         )
                     }
                 }
@@ -95,7 +95,7 @@ class DebuggerController(private val project: Project) {
                         thisLogger().error("Error in /variable/set endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
                         )
                     }
                 }
@@ -112,7 +112,7 @@ class DebuggerController(private val project: Project) {
                         thisLogger().error("Error in /breakpoint endpoint", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<Any>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
                         )
                     }
                 }
