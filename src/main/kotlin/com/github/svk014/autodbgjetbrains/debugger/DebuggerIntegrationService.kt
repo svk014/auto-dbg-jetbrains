@@ -16,28 +16,28 @@ class DebuggerIntegrationService(private val project: Project) {
         connection.subscribe(XDebuggerManager.TOPIC, object : XDebuggerManagerListener {
             override fun processStarted(debugProcess: com.intellij.xdebugger.XDebugProcess) {
                 val session = debugProcess.session
-                val msg = buildString {
-                    append("[Auto DBG] Debug session started: ")
-                    append(session.sessionName)
-                    append(" | Type: ")
-                    append(session.javaClass.name)
-                    append(" | DebugProcess: ")
-                    append(debugProcess.javaClass.name)
+                val processClass = debugProcess.javaClass.name
+                val sessionClass = session.javaClass.name
+                val processType = when {
+                    processClass.contains("java", ignoreCase = true) -> "Java Debugger"
+                    processClass.contains("js", ignoreCase = true) || processClass.contains("javascript", ignoreCase = true) -> "JavaScript Debugger"
+                    else -> "Other/Unknown Debugger"
                 }
+                val msg = "[Auto DBG] Debug session started: ${session.sessionName} | Type: $sessionClass | DebugProcess: $processClass | Detected: $processType"
                 thisLogger().info(msg)
                 appendLog(msg)
                 debugProcess.session.addSessionListener(object : XDebugSessionListener {
                     override fun sessionPaused() {
-                        thisLogger().info("[Auto DBG] Debug session paused")
-                        appendLog("[Auto DBG] Debug session paused")
+                        thisLogger().info("[Auto DBG] Debug session paused ($processType)")
+                        appendLog("[Auto DBG] Debug session paused ($processType)")
                     }
                     override fun sessionResumed() {
-                        thisLogger().info("[Auto DBG] Debug session resumed")
-                        appendLog("[Auto DBG] Debug session resumed")
+                        thisLogger().info("[Auto DBG] Debug session resumed ($processType)")
+                        appendLog("[Auto DBG] Debug session resumed ($processType)")
                     }
                     override fun sessionStopped() {
-                        thisLogger().info("[Auto DBG] Debug session stopped")
-                        appendLog("[Auto DBG] Debug session stopped")
+                        thisLogger().info("[Auto DBG] Debug session stopped ($processType)")
+                        appendLog("[Auto DBG] Debug session stopped ($processType)")
                     }
                 })
             }
