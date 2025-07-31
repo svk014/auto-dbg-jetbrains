@@ -1,5 +1,7 @@
 package com.github.svk014.autodbgjetbrains.toolWindow
 
+import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
+import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
@@ -7,10 +9,9 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import com.intellij.xdebugger.XDebuggerManager
-import javax.swing.JButton
-import javax.swing.JComboBox
-import javax.swing.JScrollPane
-import javax.swing.JTextArea
+import java.awt.BorderLayout
+import java.awt.GridLayout
+import javax.swing.*
 
 class MyToolWindowFactory : ToolWindowFactory {
 
@@ -48,54 +49,140 @@ class MyToolWindowFactory : ToolWindowFactory {
         }
 
         fun getContent() = JBPanel<JBPanel<*>>().apply {
-            val logTextArea = JTextArea(10, 40).apply {
+            layout = BorderLayout()
+
+            // Get the API server service
+            val apiServer = toolWindow.project.service<DebuggerApiServer>()
+
+            // Create server control panel
+            val serverPanel = JPanel(GridLayout(3, 2, 5, 5)).apply {
+                border = BorderFactory.createTitledBorder("REST API Server")
+
+                val serverStatusLabel = JLabel("Status: Stopped")
+                val serverUrlLabel = JLabel("URL: Not running")
+
+                val startServerButton = JButton("Start Server").apply {
+                    addActionListener {
+                        apiServer.startServer()
+                        // Update UI after server starts (with a small delay for startup)
+                        Timer(1000) {
+                            SwingUtilities.invokeLater {
+                                if (apiServer.isRunning()) {
+                                    serverStatusLabel.text = "Status: Running (Port: ${apiServer.getServerPort()})"
+                                    serverUrlLabel.text = "URL: ${apiServer.getServerUrl()}"
+                                    isEnabled = false
+                                    this@apply.parent.components.find { it is JButton && it.text == "Stop Server" }?.isEnabled = true
+                                }
+                            }
+                        }.apply { isRepeats = false }.start()
+                    }
+                }
+
+                val stopServerButton = JButton("Stop Server").apply {
+                    isEnabled = false
+                    addActionListener {
+                        apiServer.stopServer()
+                        serverStatusLabel.text = "Status: Stopped"
+                        serverUrlLabel.text = "URL: Not running"
+                        isEnabled = false
+                        startServerButton.isEnabled = true
+                    }
+                }
+
+                val copyUrlButton = JButton("Copy API URL").apply {
+                    addActionListener {
+                        apiServer.getServerUrl()?.let { url ->
+                            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                            val selection = java.awt.datatransfer.StringSelection("$url/api/tools")
+                            clipboard.setContents(selection, selection)
+                            appendLog("[Auto DBG] API discovery URL copied to clipboard: $url/api/tools")
+                        } ?: appendLog("[Auto DBG] Server is not running")
+                    }
+                }
+
+                add(serverStatusLabel)
+                add(startServerButton)
+                add(serverUrlLabel)
+                add(stopServerButton)
+                add(JLabel("Discovery Endpoint:"))
+                add(copyUrlButton)
+            }
+
+            // Create debug session control panel
+            val debugPanel = JPanel(GridLayout(2, 2, 5, 5)).apply {
+                border = BorderFactory.createTitledBorder("Debug Session Control")
+
+                val sessionDropdown = JComboBox<String>()
+                var sessionMap = emptyMap<String, com.intellij.xdebugger.XDebugSession>()
+
+                val refreshButton = JButton("Refresh Debug Sessions").apply {
+                    addActionListener {
+                        val sessions = XDebuggerManager.getInstance(toolWindow.project).debugSessions
+                        sessionDropdown.removeAllItems()
+                        sessionMap = sessions.associateBy { it.sessionName }
+                        if (sessions.isEmpty()) {
+                            appendLog("[Auto DBG] No active debug sessions.")
+                        } else {
+                            appendLog("[Auto DBG] Active debug sessions:")
+                            sessions.forEach { session ->
+                                appendLog("- ${session.sessionName} | Type: ${session.javaClass.name}")
+                                sessionDropdown.addItem(session.sessionName)
+                            }
+                        }
+                    }
+                }
+
+                val connectButton = JButton("Connect").apply {
+                    addActionListener {
+                        val selectedSessionName = sessionDropdown.selectedItem as? String
+                        val selectedSession = sessionMap[selectedSessionName]
+                        if (selectedSession != null) {
+                            appendLog("[Auto DBG] Connected to session: $selectedSessionName")
+                            if (!selectedSession.isPaused) {
+                                selectedSession.pause()
+                                appendLog("[Auto DBG] Sent pause command to: $selectedSessionName")
+                            } else {
+                                appendLog("[Auto DBG] Session already paused: $selectedSessionName")
+                            }
+                        } else {
+                            appendLog("[Auto DBG] No session selected to connect.")
+                        }
+                    }
+                }
+
+                add(refreshButton)
+                add(sessionDropdown)
+                add(connectButton)
+                add(JPanel()) // Empty panel for layout
+            }
+
+            // Create log panel
+            val logTextArea = JTextArea(15, 50).apply {
                 isEditable = false
                 lineWrap = true
                 wrapStyleWord = true
                 append("[Auto DBG] Tool window loaded!\n")
+                append("[Auto DBG] Available API endpoints:\n")
+                append("- GET /api/tools (Discovery)\n")
+                append("- GET /api/debugger/frame/{depth}\n")
+                append("- GET /api/debugger/callstack?maxDepth=10\n")
+                append("- GET /api/debugger/variables?frameId=&maxDepth=3\n")
             }
             logArea = logTextArea
             flushLogs()
-            val sessionDropdown = JComboBox<String>()
-            var sessionMap = emptyMap<String, com.intellij.xdebugger.XDebugSession>()
-            val refreshButton = JButton("Refresh Debug Sessions").apply {
-                addActionListener {
-                    val sessions = XDebuggerManager.getInstance(toolWindow.project).debugSessions
-                    sessionDropdown.removeAllItems()
-                    sessionMap = sessions.associateBy { it.sessionName }
-                    if (sessions.isEmpty()) {
-                        appendLog("[Auto DBG] No active debug sessions.")
-                    } else {
-                        appendLog("[Auto DBG] Active debug sessions:")
-                        sessions.forEach { session ->
-                            appendLog("- ${session.sessionName} | Type: ${session.javaClass.name}")
-                            sessionDropdown.addItem(session.sessionName)
-                        }
-                    }
-                }
+
+            val logScrollPane = JScrollPane(logTextArea).apply {
+                border = BorderFactory.createTitledBorder("Logs")
             }
-            val connectButton = JButton("Connect").apply {
-                addActionListener {
-                    val selectedSessionName = sessionDropdown.selectedItem as? String
-                    val selectedSession = sessionMap[selectedSessionName]
-                    if (selectedSession != null) {
-                        appendLog("[Auto DBG] Connected to session: $selectedSessionName")
-                        // Example: pause the session (or any other action)
-                        if (!selectedSession.isPaused) {
-                            selectedSession.pause()
-                            appendLog("[Auto DBG] Sent pause command to: $selectedSessionName")
-                        } else {
-                            appendLog("[Auto DBG] Session already paused: $selectedSessionName")
-                        }
-                    } else {
-                        appendLog("[Auto DBG] No session selected to connect.")
-                    }
-                }
+
+            // Layout the panels
+            val controlsPanel = JPanel(BorderLayout()).apply {
+                add(serverPanel, BorderLayout.NORTH)
+                add(debugPanel, BorderLayout.CENTER)
             }
-            add(refreshButton)
-            add(sessionDropdown)
-            add(connectButton)
-            add(JScrollPane(logTextArea))
+
+            add(controlsPanel, BorderLayout.NORTH)
+            add(logScrollPane, BorderLayout.CENTER)
         }
     }
 }
