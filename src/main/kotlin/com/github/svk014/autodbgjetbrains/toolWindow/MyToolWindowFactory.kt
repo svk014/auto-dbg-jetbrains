@@ -96,7 +96,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     addActionListener {
                         apiServer.getServerUrl()?.let { url ->
                             val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                            val selection = java.awt.datatransfer.StringSelection("$url/api/tools")
+                            val selection = java.awt.datatransfer.StringSelection("$url/api/discovery/tools")
                             clipboard.setContents(selection, selection)
                             appendLog("[Auto DBG] API discovery URL copied to clipboard: $url/api/tools")
                         } ?: appendLog("[Auto DBG] Server is not running")
