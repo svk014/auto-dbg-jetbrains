@@ -43,7 +43,9 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
 
                 FrameInfo(
                     methodName = frame.descriptor.method?.name() ?: "Unknown Method",
-                    lineNumber = sourcePosition?.line ?: -1,
+
+                    // Convert from 0-based to 1-based line numbering for user display
+                    lineNumber = sourcePosition.let { if (it != null) it.line + 1 else -1 },
                     filePath = sourcePosition?.file?.path ?: "Unknown"
                 )
             } else {
@@ -55,4 +57,3 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
         }
     }
 }
-
