@@ -1,11 +1,8 @@
 package com.github.svk014.autodbgjetbrains.server.controllers
 
-import com.github.svk014.autodbgjetbrains.annotations.ApiEndpoint
-import com.github.svk014.autodbgjetbrains.annotations.ApiParam
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.server.models.ApiResponse
 import com.github.svk014.autodbgjetbrains.server.models.BreakpointInfo
-import com.github.svk014.autodbgjetbrains.server.models.OperationResult
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -26,93 +23,76 @@ class DebuggerController(private val project: Project) {
     fun configureRoutes(routing: Routing) {
         routing {
             route("/api/debugger") {
-                // Thin wrapper routes that delegate to annotated methods
                 get("/frame/{depth}") {
                     try {
                         val depth = call.parameters["depth"]?.toIntOrNull() ?: 0
-                        val result = getFrameAt(depth)
-
-                        if (result != null) {
-                            call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
-                        } else {
-                            call.respond(
-                                HttpStatusCode.NotFound,
-                                ApiResponse<String>(success = false, error = "Frame not found at depth $depth")
-                            )
-                        }
+                        val result = getFrame(depth)
+                        call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
-                        thisLogger().error("Error in /frame/{depth} endpoint", e)
+                        thisLogger().error("Error getting frame", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse.error("Failed to get frame: ${e.message}")
                         )
                     }
                 }
 
-                // Get call stack
-                get("/callstack") {
+                get("/variables/{frameIndex}") {
                     try {
-                        val maxDepth = call.request.queryParameters["maxDepth"]?.toIntOrNull() ?: 10
-                        val result = getCallStack(maxDepth)
-                        call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
+                        val frameIndex = call.parameters["frameIndex"]?.toIntOrNull() ?: 0
+                        val result = getVariables(frameIndex)
+                        call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
-                        thisLogger().error("Error in /callstack endpoint", e)
+                        thisLogger().error("Error getting variables", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse.error("Failed to get variables: ${e.message}")
                         )
                     }
                 }
 
-                // Get frame variables
-                get("/variables") {
+                get("/call-stack") {
                     try {
-                        val frameId = call.request.queryParameters["frameId"] ?: "0"
-                        val maxDepth = call.request.queryParameters["maxDepth"]?.toIntOrNull() ?: 3
-                        val result = getVariables(frameId, maxDepth)
-                        call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
+                        val result = getCallStack()
+                        call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
-                        thisLogger().error("Error in /variables endpoint", e)
+                        thisLogger().error("Error getting call stack", e)
                         call.respond(
                             HttpStatusCode.InternalServerError,
-                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
-                        )
-                    }
-                }
-
-                // Annotation-based API endpoints
-
-                post("/variable/set") {
-                    try {
-                        // Parse request body for variable setting
-                        val variableName = call.request.queryParameters["name"] ?: ""
-                        val value = call.request.queryParameters["value"] ?: ""
-                        val frameDepth = call.request.queryParameters["frameDepth"]?.toIntOrNull() ?: 0
-
-                        val result = setVariable(variableName, value, frameDepth)
-                        call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
-                    } catch (e: Exception) {
-                        thisLogger().error("Error in /variable/set endpoint", e)
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
+                            ApiResponse.error("Failed to get call stack: ${e.message}")
                         )
                     }
                 }
 
                 post("/breakpoint") {
                     try {
-                        val filePath = call.request.queryParameters["filePath"] ?: ""
-                        val lineNumber = call.request.queryParameters["lineNumber"]?.toIntOrNull() ?: 0
-                        val condition = call.request.queryParameters["condition"]
-
-                        val result = setBreakpoint(filePath, lineNumber, condition)
-                        call.respond(HttpStatusCode.OK, ApiResponse(success = true, data = result))
+                        val file = call.request.queryParameters["file"]
+                            ?: throw IllegalArgumentException("File parameter is required")
+                        val line = call.request.queryParameters["line"]?.toIntOrNull()
+                            ?: throw IllegalArgumentException("Line parameter is required")
+                        val result = setBreakpoint(file, line)
+                        call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
-                        thisLogger().error("Error in /breakpoint endpoint", e)
+                        thisLogger().error("Error setting breakpoint", e)
                         call.respond(
-                            HttpStatusCode.InternalServerError,
-                            ApiResponse<String>(success = false, error = e.message ?: "Unknown error")
+                            HttpStatusCode.BadRequest,
+                            ApiResponse.error("Failed to set breakpoint: ${e.message}")
+                        )
+                    }
+                }
+
+                get("/evaluate") {
+                    try {
+                        val expression = call.request.queryParameters["expression"]
+                            ?: throw IllegalArgumentException("Expression parameter is required")
+                        val frameIndex = call.request.queryParameters["frameIndex"]?.toIntOrNull() ?: 0
+                        val result = evaluateExpression(expression, frameIndex)
+                        call.respond(HttpStatusCode.OK, result)
+                    } catch (e: Exception) {
+                        thisLogger().error("Error evaluating expression", e)
+                        call.respond(
+                            HttpStatusCode.BadRequest,
+                            ApiResponse.error("Failed to evaluate expression: ${e.message}")
                         )
                     }
                 }
@@ -120,118 +100,41 @@ class DebuggerController(private val project: Project) {
         }
     }
 
-    @ApiEndpoint(
-        name = "getFrameAt",
-        method = "GET",
-        path = "/api/debugger/frame/{depth}",
-        description = "Retrieve stack frame information at a specific depth (0 = top frame)",
-        returnType = "FrameInfo"
-    )
-    fun getFrameAt(
-        @ApiParam(
-            description = "The depth of the stack frame to retrieve",
-            type = "integer"
-        ) depth: Int
-    ) = debuggerService.getFrameAt(depth)
-
-    @ApiEndpoint(
-        name = "getCallStack",
-        method = "GET",
-        path = "/api/debugger/callstack",
-        description = "Get the complete call stack up to a specified depth",
-        returnType = "List<FrameInfo>"
-    )
-    fun getCallStack(
-        @ApiParam(
-            description = "Maximum depth of call stack to retrieve",
-            type = "integer",
-            required = false
-        ) maxDepth: Int = 10
-    ) = debuggerService.getCallStack(maxDepth)
-
-    @ApiEndpoint(
-        name = "getVariables",
-        method = "GET",
-        path = "/api/debugger/variables",
-        description = "Get all variables in scope at a specific frame ID",
-        returnType = "Map<String, Variable>"
-    )
-    fun getVariables(
-        @ApiParam(
-            description = "Frame ID to get variables from",
-            type = "string",
-            required = false
-        ) frameId: String = "0",
-        @ApiParam(
-            description = "Maximum depth for variable extraction",
-            type = "integer",
-            required = false
-        ) maxDepth: Int = 3
-    ) = debuggerService.getFrameVariables(frameId, maxDepth)
-
-    @ApiEndpoint(
-        name = "setVariable",
-        method = "POST",
-        path = "/api/debugger/variable/set",
-        description = "Set the value of a variable in the current debugging context",
-        returnType = "OperationResult"
-    )
-    fun setVariable(
-        @ApiParam(
-            description = "Name of the variable to set",
-            type = "string"
-        ) variableName: String,
-        @ApiParam(
-            description = "New value for the variable",
-            type = "string"
-        ) value: String,
-        @ApiParam(
-            description = "Frame depth where the variable exists",
-            type = "integer",
-            required = false
-        ) frameDepth: Int = 0
-    ): OperationResult {
-        // TODO: Implement variable setting in DebuggerIntegrationService
-        return OperationResult(
-            success = true,
-            message = "Variable setting not yet implemented",
-            details = mapOf(
-                "variable" to variableName,
-                "newValue" to value,
-                "frameDepth" to frameDepth.toString()
-            )
-        )
+    fun getFrame(depth: Int): ApiResponse {
+        val frameInfo = debuggerService.getFrameAt(depth)
+        return if (frameInfo != null) {
+            ApiResponse.success(frameInfo)  // Just pass the object directly
+        } else {
+            ApiResponse.error("No frame available at depth $depth")
+        }
     }
 
-    @ApiEndpoint(
-        name = "setBreakpoint",
-        method = "POST",
-        path = "/api/debugger/breakpoint",
-        description = "Set a breakpoint at a specific file and line",
-        returnType = "BreakpointInfo"
-    )
-    fun setBreakpoint(
-        @ApiParam(
-            description = "File path where to set the breakpoint",
-            type = "string"
-        ) filePath: String,
-        @ApiParam(
-            description = "Line number for the breakpoint",
-            type = "integer"
-        ) lineNumber: Int,
-        @ApiParam(
-            description = "Optional condition for the breakpoint",
-            type = "string",
-            required = false
-        ) condition: String? = null
-    ): BreakpointInfo {
-        // TODO: Implement breakpoint setting in DebuggerIntegrationService
-        return BreakpointInfo(
-            success = true,
-            filePath = filePath,
-            lineNumber = lineNumber,
-            condition = condition,
-            message = "Breakpoint setting not yet implemented"
+    fun getVariables(frameIndex: Int): ApiResponse {
+        // For now, use a placeholder frameId - this will need to be improved
+        // when we have proper frame ID management
+        val frameId = "frame_$frameIndex"
+        val variables = debuggerService.getFrameVariables(frameId)
+        return ApiResponse.success(variables)
+    }
+
+    fun getCallStack(): ApiResponse {
+        val callStack = debuggerService.getCallStack()
+        return ApiResponse.success(callStack)
+    }
+
+    fun setBreakpoint(file: String, line: Int): ApiResponse {
+        // Placeholder implementation - breakpoint functionality not yet implemented
+        val breakpointInfo = BreakpointInfo(true, file, line, null, "")
+        return ApiResponse.success(breakpointInfo)
+    }
+
+    fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
+        // Placeholder implementation - expression evaluation not yet implemented
+        return ApiResponse.success(
+            mapOf(
+                "result" to "Expression evaluation not yet implemented",
+                "expression" to expression
+            )
         )
     }
 }

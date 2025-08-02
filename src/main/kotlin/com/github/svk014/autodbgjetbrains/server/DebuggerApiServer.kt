@@ -1,7 +1,6 @@
 package com.github.svk014.autodbgjetbrains.server
 
 import com.github.svk014.autodbgjetbrains.server.controllers.DebuggerController
-import com.github.svk014.autodbgjetbrains.server.controllers.DiscoveryController
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
@@ -45,10 +44,6 @@ class DebuggerApiServer(private val project: Project) {
                     }
 
                     routing {
-                        // Register discovery controller routes (handles /tools endpoint)
-                        val discoveryController = DiscoveryController()
-                        discoveryController.configureRoutes(this)
-
                         // Register debugger controller routes (handles /api/debugger/* endpoints)
                         val debuggerController = DebuggerController(project)
                         debuggerController.configureRoutes(this)
@@ -61,9 +56,6 @@ class DebuggerApiServer(private val project: Project) {
                 thisLogger().info("[Auto DBG] HTTP API Server started on http://localhost:$actualPort")
                 appendLog("[Auto DBG] HTTP API Server started on http://localhost:$actualPort")
                 appendLog("[Auto DBG] Available endpoints:")
-                appendLog("  - GET  http://localhost:$actualPort/api/discovery/tools")
-                appendLog("  - GET  http://localhost:$actualPort/api/discovery/health")
-                appendLog("  - GET  http://localhost:$actualPort/api/discovery/schema")
                 appendLog("  - GET  http://localhost:$actualPort/api/debugger/frame/{depth}")
                 appendLog("  - GET  http://localhost:$actualPort/api/debugger/callstack")
                 appendLog("  - GET  http://localhost:$actualPort/api/debugger/variables")

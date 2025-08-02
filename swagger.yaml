@@ -1,0 +1,405 @@
+openapi: 3.0.3
+info:
+  title: JetBrains Debugger API
+  description: REST API for accessing JetBrains IDE debugger functionality
+  version: 1.0.0
+  contact:
+    name: Auto DBG JetBrains Plugin
+    url: https://github.com/svk014/auto-dbg-jetbrains
+
+servers:
+  - url: http://localhost:{port}
+    description: Local development server
+    variables:
+      port:
+        default: '8080'
+        description: Dynamic port assigned by the plugin
+
+paths:
+  /api/debugger/frame/{depth}:
+    get:
+      summary: Get frame information at specific depth
+      description: Retrieves frame information from the call stack at the specified depth
+      operationId: getFrame
+      tags:
+        - Frame Operations
+      parameters:
+        - name: depth
+          in: path
+          required: true
+          description: The depth of the frame in the call stack (0 = current frame)
+          schema:
+            type: integer
+            minimum: 0
+            example: 0
+      responses:
+        '200':
+          description: Frame information retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Successful frame retrieval
+                  value:
+                    success: true
+                    data:
+                      id: "frame_0"
+                      methodName: "calculateSum"
+                      className: "com.example.Calculator"
+                      lineNumber: 42
+                      fileName: "Calculator.java"
+                    error: null
+                    timestamp: 1722556800000
+                no_frame:
+                  summary: No frame at depth
+                  value:
+                    success: false
+                    data: null
+                    error: "No frame available at depth 5"
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/variables/{frameIndex}:
+    get:
+      summary: Get variables for a specific frame
+      description: Retrieves all variables visible in the specified frame
+      operationId: getVariables
+      tags:
+        - Variable Operations
+      parameters:
+        - name: frameIndex
+          in: path
+          required: true
+          description: The index of the frame to get variables from
+          schema:
+            type: integer
+            minimum: 0
+            example: 0
+      responses:
+        '200':
+          description: Variables retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Successful variable retrieval
+                  value:
+                    success: true
+                    data:
+                      localVar1:
+                        name: "count"
+                        type: "int"
+                        value: "42"
+                        hasChildren: false
+                      localVar2:
+                        name: "items"
+                        type: "List<String>"
+                        value: "[item1, item2]"
+                        hasChildren: true
+                    error: null
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/call-stack:
+    get:
+      summary: Get the current call stack
+      description: Retrieves the complete call stack from the debugger
+      operationId: getCallStack
+      tags:
+        - Frame Operations
+      responses:
+        '200':
+          description: Call stack retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Successful call stack retrieval
+                  value:
+                    success: true
+                    data:
+                      - id: "frame_0"
+                        methodName: "calculateSum"
+                        className: "com.example.Calculator"
+                        lineNumber: 42
+                        fileName: "Calculator.java"
+                      - id: "frame_1"
+                        methodName: "processData"
+                        className: "com.example.DataProcessor"
+                        lineNumber: 128
+                        fileName: "DataProcessor.java"
+                    error: null
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/breakpoint:
+    post:
+      summary: Set a breakpoint
+      description: Sets a breakpoint at the specified file and line number
+      operationId: setBreakpoint
+      tags:
+        - Breakpoint Operations
+      parameters:
+        - name: file
+          in: query
+          required: true
+          description: The file path where to set the breakpoint
+          schema:
+            type: string
+            example: "/src/main/java/com/example/Calculator.java"
+        - name: line
+          in: query
+          required: true
+          description: The line number where to set the breakpoint
+          schema:
+            type: integer
+            minimum: 1
+            example: 42
+      responses:
+        '200':
+          description: Breakpoint set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Successful breakpoint creation
+                  value:
+                    success: true
+                    data:
+                      file: "/src/main/java/com/example/Calculator.java"
+                      line: 42
+                      enabled: true
+                      condition: null
+                      message: null
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - invalid parameters
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                missing_params:
+                  summary: Missing required parameters
+                  value:
+                    success: false
+                    data: null
+                    error: "File parameter is required"
+                    timestamp: 1722556800000
+
+  /api/debugger/evaluate:
+    get:
+      summary: Evaluate an expression
+      description: Evaluates a code expression in the context of the specified frame
+      operationId: evaluateExpression
+      tags:
+        - Expression Operations
+      parameters:
+        - name: expression
+          in: query
+          required: true
+          description: The expression to evaluate
+          schema:
+            type: string
+            example: "count + 1"
+        - name: frameIndex
+          in: query
+          required: false
+          description: The frame index in which to evaluate the expression
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+            example: 0
+      responses:
+        '200':
+          description: Expression evaluated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Successful expression evaluation
+                  value:
+                    success: true
+                    data:
+                      result: "43"
+                    error: null
+                    timestamp: 1722556800000
+                not_implemented:
+                  summary: Feature not yet implemented
+                  value:
+                    success: true
+                    data:
+                      result: "Expression evaluation not yet implemented"
+                      expression: "count + 1"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - invalid expression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+components:
+  schemas:
+    ApiResponse:
+      type: object
+      description: Generic API response wrapper
+      required:
+        - success
+        - timestamp
+      properties:
+        success:
+          type: boolean
+          description: Indicates if the operation was successful
+          example: true
+        data:
+          type: object
+          nullable: true
+          description: The response data (null on error)
+          example: {}
+        error:
+          type: string
+          nullable: true
+          description: Error message (null on success)
+          example: null
+        timestamp:
+          type: integer
+          format: int64
+          description: Unix timestamp when the response was generated
+          example: 1722556800000
+
+    BreakpointInfo:
+      type: object
+      description: Information about a debugger breakpoint
+      required:
+        - file
+        - line
+        - enabled
+      properties:
+        file:
+          type: string
+          description: The file path of the breakpoint
+          example: "/src/main/java/com/example/Calculator.java"
+        line:
+          type: integer
+          minimum: 1
+          description: The line number of the breakpoint
+          example: 42
+        enabled:
+          type: boolean
+          description: Whether the breakpoint is enabled
+          example: true
+        condition:
+          type: string
+          nullable: true
+          description: Optional condition for the breakpoint
+          example: "count > 10"
+        message:
+          type: string
+          nullable: true
+          description: Optional message to log when breakpoint is hit
+          example: "Breakpoint hit in calculateSum"
+
+    FrameInfo:
+      type: object
+      description: Information about a stack frame
+      properties:
+        id:
+          type: string
+          description: Unique identifier for the frame
+          example: "frame_0"
+        methodName:
+          type: string
+          description: Name of the method in this frame
+          example: "calculateSum"
+        className:
+          type: string
+          description: Name of the class containing the method
+          example: "com.example.Calculator"
+        lineNumber:
+          type: integer
+          description: Current line number in the frame
+          example: 42
+        fileName:
+          type: string
+          description: Name of the source file
+          example: "Calculator.java"
+
+    Variable:
+      type: object
+      description: Information about a debugger variable
+      properties:
+        name:
+          type: string
+          description: Name of the variable
+          example: "count"
+        type:
+          type: string
+          description: Type of the variable
+          example: "int"
+        value:
+          type: string
+          description: String representation of the variable's value
+          example: "42"
+        hasChildren:
+          type: boolean
+          description: Whether this variable has child variables (e.g., object fields)
+          example: false
+
+    ErrorResponse:
+      type: object
+      description: Error response format
+      properties:
+        success:
+          type: boolean
+          example: false
+        data:
+          type: object
+          nullable: true
+          example: null
+        error:
+          type: string
+          description: Error message
+          example: "Operation failed"
+        timestamp:
+          type: integer
+          format: int64
+          example: 1722556800000
+
+tags:
+  - name: Frame Operations
+    description: Operations related to stack frames
+  - name: Variable Operations
+    description: Operations for accessing variable values
+  - name: Breakpoint Operations
+    description: Operations for managing breakpoints
+  - name: Expression Operations
+    description: Operations for evaluating expressions

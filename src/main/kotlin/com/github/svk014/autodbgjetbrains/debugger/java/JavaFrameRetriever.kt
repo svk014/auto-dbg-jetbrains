@@ -6,6 +6,9 @@ import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.debugger.engine.JavaStackFrame
+import com.intellij.openapi.diagnostic.thisLogger
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
 
 /**
  * Java-specific implementation for retrieving stack frame information
@@ -22,23 +25,29 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
             val suspendContext = currentSession.suspendContext ?: return null
             val activeExecutionStack = suspendContext.activeExecutionStack ?: return null
 
-            // Get the stack frames
-            val frames = mutableListOf<XStackFrame>()
-            activeExecutionStack.computeStackFrames(0, object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
-                override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
-                    // Filter for Java frames only
-                    val javaFrames = stackFrames.filterIsInstance<JavaStackFrame>()
-                    frames.addAll(javaFrames)
-                }
+            // Use CompletableFuture to handle the async callback
+            val framesFuture = CompletableFuture<List<JavaStackFrame>>()
 
-                override fun errorOccurred(errorMessage: String) {
-                    // Handle error - frames will remain empty
-                }
-            })
+            activeExecutionStack.computeStackFrames(
+                0,
+                object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
+                    override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
+                        // Filter for Java frames only
+                        val javaFrames = stackFrames.filterIsInstance<JavaStackFrame>()
+                        framesFuture.complete(javaFrames)
+                    }
+
+                    override fun errorOccurred(errorMessage: String) {
+                        framesFuture.completeExceptionally(RuntimeException(errorMessage))
+                    }
+                })
+
+            // Wait for the frames to be computed (with timeout)
+            val frames = framesFuture.get(5, TimeUnit.SECONDS)
 
             // Return the Java frame at the specified depth
             if (depth < frames.size) {
-                val frame = frames[depth] as JavaStackFrame
+                val frame = frames[depth]
                 val sourcePosition = frame.sourcePosition
 
                 FrameInfo(
@@ -52,7 +61,7 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
                 null
             }
         } catch (e: Exception) {
-            // Log error if needed and return null
+            thisLogger().error("Error getting frame", e)
             null
         }
     }
