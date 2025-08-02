@@ -7,62 +7,81 @@ import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.debugger.engine.JavaStackFrame
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.TimeUnit
 
-/**
- * Java-specific implementation for retrieving stack frame information
- */
 class JavaFrameRetriever(private val project: Project) : FrameRetriever {
 
     override fun getFrameAt(depth: Int): FrameInfo? {
         return try {
-            val debuggerManager = XDebuggerManager.getInstance(project)
-            val currentSession = debuggerManager.currentSession ?: return null
-
-            if (!currentSession.isSuspended) return null
-
-            val suspendContext = currentSession.suspendContext ?: return null
-            val activeExecutionStack = suspendContext.activeExecutionStack ?: return null
-
-            // Use CompletableFuture to handle the async callback
-            val framesFuture = CompletableFuture<List<JavaStackFrame>>()
-
-            activeExecutionStack.computeStackFrames(
-                0,
-                object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
-                    override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
-                        // Filter for Java frames only
-                        val javaFrames = stackFrames.filterIsInstance<JavaStackFrame>()
-                        framesFuture.complete(javaFrames)
-                    }
-
-                    override fun errorOccurred(errorMessage: String) {
-                        framesFuture.completeExceptionally(RuntimeException(errorMessage))
-                    }
-                })
-
-            // Wait for the frames to be computed (with timeout)
-            val frames = framesFuture.get(5, TimeUnit.SECONDS)
-
-            // Return the Java frame at the specified depth
-            if (depth < frames.size) {
-                val frame = frames[depth]
-                val sourcePosition = frame.sourcePosition
-
-                FrameInfo(
-                    methodName = frame.descriptor.method?.name() ?: "Unknown Method",
-
-                    // Convert from 0-based to 1-based line numbering for user display
-                    lineNumber = sourcePosition.let { if (it != null) it.line + 1 else -1 },
-                    filePath = sourcePosition?.file?.path ?: "Unknown"
-                )
-            } else {
-                null
-            }
+            val session = getActiveDebugSession() ?: return null
+            val frames = fetchStackFrames(session)
+            extractFrameInfo(frames, depth)
         } catch (e: Exception) {
-            thisLogger().error("Error getting frame", e)
+            thisLogger().error("Error getting frame at depth $depth", e)
             null
         }
+    }
+
+    private fun getActiveDebugSession(): XDebugSession? {
+        val debuggerManager = XDebuggerManager.getInstance(project)
+        val currentSession = debuggerManager.currentSession ?: return null
+
+        if (!currentSession.isSuspended) return null
+
+        return currentSession
+    }
+
+    private fun fetchStackFrames(session: XDebugSession): List<JavaStackFrame> {
+        val suspendContext = session.suspendContext ?: throw IllegalStateException("No suspend context available")
+
+        val activeExecutionStack =
+            suspendContext.activeExecutionStack ?: throw IllegalStateException("No active execution stack available")
+
+        val framesFuture = CompletableFuture<List<JavaStackFrame>>()
+        val allFrames = mutableListOf<JavaStackFrame>()
+
+        activeExecutionStack.computeStackFrames(0, createStackFrameContainer(framesFuture, allFrames))
+
+        return framesFuture.get(5, TimeUnit.SECONDS)
+    }
+
+    private fun createStackFrameContainer(
+        framesFuture: CompletableFuture<List<JavaStackFrame>>, allFrames: MutableList<JavaStackFrame>
+    ) = object : XStackFrameContainer {
+
+        override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
+            try {
+                val javaFrames = stackFrames.filterIsInstance<JavaStackFrame>()
+                allFrames.addAll(javaFrames)
+                if (last) {
+                    framesFuture.complete(allFrames.toList())
+                }
+            } catch (e: Exception) {
+                framesFuture.completeExceptionally(e)
+            }
+        }
+
+        override fun errorOccurred(errorMessage: String) {
+            framesFuture.completeExceptionally(
+                RuntimeException("Stack frame computation failed: $errorMessage")
+            )
+        }
+    }
+
+    private fun extractFrameInfo(frames: List<JavaStackFrame>, depth: Int): FrameInfo? {
+        if (depth >= frames.size) return null
+
+        val frame = frames[depth]
+        val sourcePosition = frame.sourcePosition
+
+        return FrameInfo(
+            methodName = frame.descriptor.method?.name() ?: "Unknown Method",
+            // Convert from 0-based to 1-based line numbering for user display
+            lineNumber = sourcePosition.let { if (it != null) it.line + 1 else -1 },
+            filePath = sourcePosition?.file?.path ?: "Unknown"
+        )
     }
 }
