@@ -12,6 +12,7 @@ servers:
     description: Local development server
     variables:
       port:
+        default: '<add port here>'
         description: Dynamic port assigned by the plugin
 
 paths:
