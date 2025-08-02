@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: JetBrains Debugger API
   description: REST API for accessing JetBrains IDE debugger functionality
-  version: 1.0.0
+  version: 0.1.0
   contact:
     name: Auto DBG JetBrains Plugin
     url: https://github.com/svk014/auto-dbg-jetbrains
@@ -12,7 +12,6 @@ servers:
     description: Local development server
     variables:
       port:
-        default: '8080'
         description: Dynamic port assigned by the plugin
 
 paths:
@@ -45,11 +44,9 @@ paths:
                   value:
                     success: true
                     data:
-                      id: "frame_0"
                       methodName: "calculateSum"
-                      className: "com.example.Calculator"
                       lineNumber: 42
-                      fileName: "Calculator.java"
+                      filePath: "/src/main/java/com/example/Calculator.java"
                     error: null
                     timestamp: 1722556800000
                 no_frame:
@@ -94,17 +91,7 @@ paths:
                   summary: Successful variable retrieval
                   value:
                     success: true
-                    data:
-                      localVar1:
-                        name: "count"
-                        type: "int"
-                        value: "42"
-                        hasChildren: false
-                      localVar2:
-                        name: "items"
-                        type: "List<String>"
-                        value: "[item1, item2]"
-                        hasChildren: true
+                    data: {}
                     error: null
                     timestamp: 1722556800000
         '500':
@@ -134,16 +121,12 @@ paths:
                   value:
                     success: true
                     data:
-                      - id: "frame_0"
-                        methodName: "calculateSum"
-                        className: "com.example.Calculator"
+                      - methodName: "calculateSum"
                         lineNumber: 42
-                        fileName: "Calculator.java"
-                      - id: "frame_1"
-                        methodName: "processData"
-                        className: "com.example.DataProcessor"
+                        filePath: "/src/main/java/com/example/Calculator.java"
+                      - methodName: "processData"
                         lineNumber: 128
-                        fileName: "DataProcessor.java"
+                        filePath: "/src/main/java/com/example/DataProcessor.java"
                     error: null
                     timestamp: 1722556800000
         '500':
@@ -189,11 +172,11 @@ paths:
                   value:
                     success: true
                     data:
-                      file: "/src/main/java/com/example/Calculator.java"
-                      line: 42
-                      enabled: true
+                      success: true
+                      filePath: "/src/main/java/com/example/Calculator.java"
+                      lineNumber: 42
                       condition: null
-                      message: null
+                      message: "Breakpoint set successfully"
                     error: null
                     timestamp: 1722556800000
         '400':
@@ -243,14 +226,6 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
               examples:
-                success:
-                  summary: Successful expression evaluation
-                  value:
-                    success: true
-                    data:
-                      result: "43"
-                    error: null
-                    timestamp: 1722556800000
                 not_implemented:
                   summary: Feature not yet implemented
                   value:
@@ -281,10 +256,8 @@ components:
           description: Indicates if the operation was successful
           example: true
         data:
-          type: object
           nullable: true
           description: The response data (null on error)
-          example: {}
         error:
           type: string
           nullable: true
@@ -296,27 +269,70 @@ components:
           description: Unix timestamp when the response was generated
           example: 1722556800000
 
+    FrameResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/FrameInfo'
+
+    CallStackResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              nullable: true
+              type: array
+              items:
+                $ref: '#/components/schemas/FrameInfo'
+
+    BreakpointResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              nullable: true
+              allOf:
+                - $ref: '#/components/schemas/BreakpointInfo'
+
+    VariablesResponse:
+      allOf:
+        - $ref: '#/components/schemas/ApiResponse'
+        - type: object
+          properties:
+            data:
+              nullable: true
+              type: object
+              additionalProperties: true
+              description: Variable data as key-value pairs
+
     BreakpointInfo:
       type: object
       description: Information about a debugger breakpoint
       required:
-        - file
-        - line
-        - enabled
+        - success
+        - filePath
+        - lineNumber
+        - message
       properties:
-        file:
+        success:
+          type: boolean
+          description: Whether the breakpoint operation was successful
+          example: true
+        filePath:
           type: string
           description: The file path of the breakpoint
           example: "/src/main/java/com/example/Calculator.java"
-        line:
+        lineNumber:
           type: integer
           minimum: 1
           description: The line number of the breakpoint
           example: 42
-        enabled:
-          type: boolean
-          description: Whether the breakpoint is enabled
-          example: true
         condition:
           type: string
           nullable: true
@@ -324,75 +340,51 @@ components:
           example: "count > 10"
         message:
           type: string
-          nullable: true
-          description: Optional message to log when breakpoint is hit
-          example: "Breakpoint hit in calculateSum"
+          description: Status message about the breakpoint operation
+          example: "Breakpoint set successfully"
 
     FrameInfo:
       type: object
       description: Information about a stack frame
+      required:
+        - methodName
+        - lineNumber
+        - filePath
       properties:
-        id:
-          type: string
-          description: Unique identifier for the frame
-          example: "frame_0"
         methodName:
           type: string
           description: Name of the method in this frame
           example: "calculateSum"
-        className:
-          type: string
-          description: Name of the class containing the method
-          example: "com.example.Calculator"
         lineNumber:
           type: integer
           description: Current line number in the frame
           example: 42
-        fileName:
+        filePath:
           type: string
-          description: Name of the source file
-          example: "Calculator.java"
+          description: Full path to the source file
+          example: "/src/main/java/com/example/Calculator.java"
 
-    Variable:
+    OperationResult:
       type: object
-      description: Information about a debugger variable
-      properties:
-        name:
-          type: string
-          description: Name of the variable
-          example: "count"
-        type:
-          type: string
-          description: Type of the variable
-          example: "int"
-        value:
-          type: string
-          description: String representation of the variable's value
-          example: "42"
-        hasChildren:
-          type: boolean
-          description: Whether this variable has child variables (e.g., object fields)
-          example: false
-
-    ErrorResponse:
-      type: object
-      description: Error response format
+      description: Result of a generic operation
+      required:
+        - success
+        - message
       properties:
         success:
           type: boolean
-          example: false
-        data:
-          type: object
-          nullable: true
-          example: null
-        error:
+          description: Whether the operation was successful
+          example: true
+        message:
           type: string
-          description: Error message
-          example: "Operation failed"
-        timestamp:
-          type: integer
-          format: int64
-          example: 1722556800000
+          description: Description of the operation result
+          example: "Operation completed successfully"
+        details:
+          type: object
+          additionalProperties:
+            type: string
+          description: Additional details about the operation
+          example: {}
 
 tags:
   - name: Frame Operations
