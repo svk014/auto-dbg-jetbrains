@@ -2,14 +2,41 @@ package com.github.svk014.autodbgjetbrains.debugger.java
 
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
 import com.github.svk014.autodbgjetbrains.debugger.models.Variable
+import com.github.svk014.autodbgjetbrains.debugger.utils.AsyncDebuggerUtils
+import com.intellij.debugger.engine.JavaValue
+import com.intellij.debugger.ui.impl.watch.FieldDescriptorImpl
+import com.intellij.debugger.ui.impl.watch.LocalVariableDescriptorImpl
+import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
-import com.intellij.xdebugger.frame.XStackFrame
+import com.intellij.xdebugger.frame.*
+import com.intellij.xdebugger.frame.presentation.XValuePresentation
+import com.sun.jdi.ArrayReference
+import com.sun.jdi.IntegerValue
+import com.sun.jdi.ObjectReference
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
+import javax.swing.Icon
+import kotlin.math.min
 
-/**
- * Java-specific implementation for retrieving variable information
- */
 class JavaVariableRetriever(private val project: Project) : VariableRetriever {
+
+    companion object {
+        private const val DEFAULT_TIMEOUT_SECONDS = 3L
+        private const val FRAME_FETCH_TIMEOUT_SECONDS = 5L
+        private const val MAX_ARRAY_PREVIEW_SIZE = 100
+        private const val RETRY_ATTEMPTS = 3
+        private const val RETRY_DELAY_MS = 100L
+
+        /**
+         * The `ACC_SYNTHETIC` flag from the JVM specification, used to identify synthetic members.
+         * The value is 0x1000, as defined in `java.lang.reflect.Modifier` and the JVM spec.
+         * It is defined here because `Modifier.SYNTHETIC` is package-private and inaccessible.
+         */
+        private const val ACC_SYNTHETIC = 0x1000
+    }
 
     override fun getFrameVariables(frameId: String, maxDepth: Int): Map<String, Variable> {
         return try {
@@ -21,247 +48,413 @@ class JavaVariableRetriever(private val project: Project) : VariableRetriever {
             val suspendContext = currentSession.suspendContext ?: return emptyMap()
             val activeExecutionStack = suspendContext.activeExecutionStack ?: return emptyMap()
 
-            // Parse frameId to get frame depth
             val depth = frameId.toIntOrNull() ?: 0
 
-            // Get the stack frames
-            val frames = mutableListOf<XStackFrame>()
-            activeExecutionStack.computeStackFrames(0, object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
-                override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
-                    frames.addAll(stackFrames)
-                }
-
-                override fun errorOccurred(errorMessage: String) {
-                    // Handle error - frames will remain empty
-                }
-            })
+            val framesFuture = AsyncDebuggerUtils.fetchStackFramesAsync(activeExecutionStack)
+            val frames = AsyncDebuggerUtils.safeGet(framesFuture, 5, emptyList())
 
             if (depth >= frames.size) return emptyMap()
 
             val targetFrame = frames[depth]
-            val variables = mutableMapOf<String, Variable>()
-
-            // Get variables from the target frame
-            extractVariablesFromFrame(targetFrame, variables, maxDepth)
-
-            variables
+            extractVariablesFromFrame(targetFrame, maxDepth)
         } catch (ex: Exception) {
+            thisLogger().error("Error getting frame variables for frameId: $frameId", ex)
             emptyMap()
         }
     }
 
-    /**
-     * Extract variables from a stack frame using XDebugger APIs
-     */
-    private fun extractVariablesFromFrame(
-        frame: XStackFrame,
-        variables: MutableMap<String, Variable>,
-        maxDepth: Int
-    ) {
-        try {
-            // Create a composite node to collect variables
-            val variableNode = object : com.intellij.xdebugger.frame.XCompositeNode {
-                override fun addChildren(children: com.intellij.xdebugger.frame.XValueChildrenList, last: Boolean) {
-                    for (i in 0 until children.size()) {
-                        val name = children.getName(i)
-                        val xValue = children.getValue(i)
-                        val variable = convertXValueToVariable(name, xValue, 0, maxDepth)
-                        variables[name] = variable
-                    }
-                }
+    private fun extractVariablesFromFrame(frame: XStackFrame, maxDepth: Int): Map<String, Variable> {
+        return try {
+            val variablesFuture = AsyncDebuggerUtils.fetchFrameVariablesAsync(frame)
+            val rawVariables = AsyncDebuggerUtils.safeGet(variablesFuture, FRAME_FETCH_TIMEOUT_SECONDS, emptyList())
 
-                override fun tooManyChildren(remaining: Int) {
-                    variables["..."] = Variable(
-                        name = "...",
-                        value = "$remaining more variables",
-                        type = "Info"
-                    )
-                }
-
-                override fun setAlreadySorted(alreadySorted: Boolean) {
-                    // No action needed
-                }
-
-                override fun setErrorMessage(errorMessage: String) {
-                    variables["error"] = Variable(
-                        name = "error",
-                        value = errorMessage,
-                        type = "Error"
-                    )
-                }
-
-                override fun setErrorMessage(errorMessage: String, link: com.intellij.xdebugger.frame.XDebuggerTreeNodeHyperlink?) {
-                    variables["error"] = Variable(
-                        name = "error",
-                        value = errorMessage,
-                        type = "Error"
-                    )
-                }
-
-                override fun setMessage(message: String, icon: javax.swing.Icon?, attributes: com.intellij.ui.SimpleTextAttributes, link: com.intellij.xdebugger.frame.XDebuggerTreeNodeHyperlink?) {
-                    variables["message"] = Variable(
-                        name = "message",
-                        value = message,
-                        type = "Info"
-                    )
-                }
-
-                override fun isObsolete(): Boolean = false
+            rawVariables.associate { (name, xValue) ->
+                name.let { it to convertXValueToVariable(it, xValue, 0, maxDepth) }
             }
-
-            // Compute children (variables) of the frame
-            frame.computeChildren(variableNode)
-
         } catch (ex: Exception) {
-            // If we can't extract variables normally, try alternative approach
-            extractVariablesFromFrameString(frame, variables)
+            thisLogger().error("Error extracting variables from frame", ex)
+            mapOf(
+                "error" to Variable(
+                    name = "error",
+                    value = "Failed to extract variables: ${ex.message}",
+                    type = "Error",
+                    isError = true
+                )
+            )
         }
     }
 
-    /**
-     * Convert XValue to our Variable model
-     */
     private fun convertXValueToVariable(
         name: String,
-        xValue: com.intellij.xdebugger.frame.XValue,
+        xValue: XValue,
         currentDepth: Int,
         maxDepth: Int
     ): Variable {
         return try {
-            // Get string representation of the value
-            val valueText = xValue.toString()
+            withRetry {
+                extractCompleteVariableInfo(name, xValue, currentDepth, maxDepth)
+            }
+        } catch (e: Exception) {
+            createErrorVariable(name, e)
+        }
+    }
 
-            // If we've reached max depth, return simple variable
-            if (currentDepth >= maxDepth) {
-                return Variable(
-                    name = name,
-                    value = valueText,
-                    type = extractTypeFromXValue(xValue)
+    private fun extractCompleteVariableInfo(
+        name: String,
+        xValue: XValue,
+        currentDepth: Int,
+        maxDepth: Int
+    ): Variable {
+        val future = CompletableFuture<Variable>()
+        val handler = createPresentationHandler(name, currentDepth, maxDepth, xValue, future)
+
+        xValue.computePresentation(handler, XValuePlace.TREE)
+
+        return try {
+            future.get(DEFAULT_TIMEOUT_SECONDS, TimeUnit.SECONDS)
+        } catch (e: TimeoutException) {
+            thisLogger().error(e)
+            throw VariableExtractionError.TimeoutError("Timeout extracting value for '$name'")
+        } catch (e: Exception) {
+            createErrorVariable(name, e)
+        }
+    }
+
+    private fun createPresentationHandler(
+        name: String,
+        currentDepth: Int,
+        maxDepth: Int,
+        xValue: XValue,
+        future: CompletableFuture<Variable>
+    ): XValueNode {
+        return object : XValueNode {
+            override fun setPresentation(icon: Icon?, type: String?, value: String, hasChildren: Boolean) {
+                handlePresentation(name, type, value, hasChildren, xValue, currentDepth, maxDepth, future)
+            }
+
+            override fun setPresentation(icon: Icon?, presentation: XValuePresentation, hasChildren: Boolean) {
+                val valueBuilder = StringBuilder()
+                presentation.renderValue(object : XValuePresentation.XValueTextRenderer {
+                    override fun renderValue(value: String) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderValue(value: String, attributes: TextAttributesKey) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderStringValue(value: String) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderStringValue(
+                        value: String,
+                        prefix: String?,
+                        maxLength: Int
+                    ) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderNumericValue(value: String) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderKeywordValue(value: String) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderComment(value: String) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderSpecialSymbol(value: String) {
+                        valueBuilder.append(value)
+                    }
+
+                    override fun renderError(value: String) {
+                        valueBuilder.append(value)
+                    }
+                })
+
+                handlePresentation(
+                    name,
+                    presentation.type,
+                    presentation.separator + valueBuilder.toString(),
+                    hasChildren,
+                    xValue,
+                    currentDepth,
+                    maxDepth,
+                    future
                 )
             }
 
-            // For complex objects, try to get children
-            val children = mutableMapOf<String, Variable>()
-
-            try {
-                val childrenNode = object : com.intellij.xdebugger.frame.XCompositeNode {
-                    override fun addChildren(childrenList: com.intellij.xdebugger.frame.XValueChildrenList, last: Boolean) {
-                        for (i in 0 until minOf(childrenList.size(), 10)) { // Limit to avoid infinite recursion
-                            val childName = childrenList.getName(i)
-                            val childValue = childrenList.getValue(i)
-                            children[childName] = convertXValueToVariable(
-                                childName,
-                                childValue,
-                                currentDepth + 1,
-                                maxDepth
-                            )
-                        }
-                    }
-
-                    override fun tooManyChildren(remaining: Int) {
-                        children["..."] = Variable(
-                            name = "...",
-                            value = "$remaining more items",
-                            type = "Info"
-                        )
-                    }
-
-                    override fun setAlreadySorted(alreadySorted: Boolean) {}
-
-                    override fun setErrorMessage(errorMessage: String) {
-                        children["error"] = Variable(
-                            name = "error",
-                            value = errorMessage,
-                            type = "Error"
-                        )
-                    }
-
-                    override fun setErrorMessage(errorMessage: String, link: com.intellij.xdebugger.frame.XDebuggerTreeNodeHyperlink?) {
-                        children["error"] = Variable(
-                            name = "error",
-                            value = errorMessage,
-                            type = "Error"
-                        )
-                    }
-
-                    override fun setMessage(message: String, icon: javax.swing.Icon?, attributes: com.intellij.ui.SimpleTextAttributes, link: com.intellij.xdebugger.frame.XDebuggerTreeNodeHyperlink?) {
-                        children["message"] = Variable(
-                            name = "message",
-                            value = message,
-                            type = "Info"
-                        )
-                    }
-
-                    override fun isObsolete(): Boolean = false
-                }
-
-                xValue.computeChildren(childrenNode)
-            } catch (ex: Exception) {
-                // Children extraction failed, proceed without children
+            override fun setFullValueEvaluator(fullValueEvaluator: XFullValueEvaluator) {
+                future.complete(
+                    Variable(
+                        name = name,
+                        value = "<Large value available>",
+                        type = "LargeValue",
+                        hasChildren = true
+                    )
+                )
             }
-
-            Variable(
-                name = name,
-                value = valueText,
-                type = extractTypeFromXValue(xValue),
-                children = children
-            )
-        } catch (ex: Exception) {
-            Variable(
-                name = name,
-                value = "Error: ${ex.message}",
-                type = "Error"
-            )
         }
     }
 
-    /**
-     * Extract type information from XValue
-     */
-    private fun extractTypeFromXValue(xValue: com.intellij.xdebugger.frame.XValue): String {
-        return try {
-            // Try to get type from the XValue's string representation
-            val valueString = xValue.toString()
-            when {
-                valueString.contains("String") -> "String"
-                valueString.contains("Integer") -> "Integer"
-                valueString.contains("Boolean") -> "Boolean"
-                valueString.contains("Double") -> "Double"
-                valueString.contains("Float") -> "Float"
-                valueString.contains("Long") -> "Long"
-                valueString.contains("Array") -> "Array"
-                valueString.contains("List") -> "List"
-                valueString.contains("Map") -> "Map"
-                else -> "Object"
-            }
-        } catch (ex: Exception) {
-            "Unknown"
-        }
-    }
-
-    /**
-     * Fallback method to extract variables from frame string representation
-     */
-    private fun extractVariablesFromFrameString(
-        frame: XStackFrame,
-        variables: MutableMap<String, Variable>
+    private fun handlePresentation(
+        name: String,
+        type: String?,
+        value: String,
+        hasChildren: Boolean,
+        xValue: XValue,
+        currentDepth: Int,
+        maxDepth: Int,
+        future: CompletableFuture<Variable>
     ) {
         try {
-            val frameString = frame.toString()
+            val variable = buildVariable(name, type, value, hasChildren, xValue, currentDepth, maxDepth)
+            future.complete(variable)
+        } catch (e: Exception) {
+            future.complete(createErrorVariable(name, e))
+        }
+    }
 
-            // Try to parse basic variable info from frame string
-            // This is a fallback and may not work for all cases
-            variables["frameInfo"] = Variable(
-                name = "frameInfo",
-                value = frameString,
-                type = "Debug Info"
+    private fun buildVariable(
+        name: String,
+        type: String?,
+        value: String,
+        hasChildren: Boolean,
+        xValue: XValue,
+        currentDepth: Int,
+        maxDepth: Int
+    ): Variable {
+        val objectId = extractObjectId(xValue, value)
+        val isNull = value == "null"
+        val modifiers = extractModifiers(xValue)
+        val typeInfo = extractFullTypeInfo(xValue)
+        val (arraySize, arrayElements) = extractArrayInfo(xValue)
+        val collectionSize = if (arraySize == null) extractCollectionSize(xValue) else null
+
+        return Variable(
+            name = name,
+            value = value,
+            type = type ?: typeInfo.rawType,
+            fullyQualifiedType = typeInfo.rawType,
+            genericType = typeInfo.genericSignature,
+            isNull = isNull,
+            hasChildren = hasChildren,
+            objectId = objectId,
+            modifiers = modifiers.accessModifiers,
+            isStatic = modifiers.isStatic,
+            isFinal = modifiers.isFinal,
+            isEnum = typeInfo.isEnum,
+            isInterface = typeInfo.isInterface,
+            isLambda = typeInfo.isLambda,
+            arraySize = arraySize,
+            collectionSize = collectionSize,
+            children = if (hasChildren && currentDepth < maxDepth) {
+                arrayElements?.associateBy { it.name } ?: extractChildrenVariables(xValue, currentDepth, maxDepth)
+            } else {
+                emptyMap()
+            }
+        )
+    }
+
+    private fun createErrorVariable(name: String, e: Throwable): Variable {
+        return Variable(
+            name = name,
+            value = "Error: ${e.message ?: e.javaClass.simpleName}",
+            type = "Error",
+            isError = true
+        )
+    }
+
+    private fun <T> withRetry(
+        attempts: Int = RETRY_ATTEMPTS,
+        delayMs: Long = RETRY_DELAY_MS,
+        operation: () -> T
+    ): T {
+        repeat(attempts - 1) { attempt ->
+            try {
+                return operation()
+            } catch (e: Exception) {
+                if (e is VariableExtractionError.DebuggerNotAvailable) throw e
+                Thread.sleep(delayMs * (attempt + 1))
+            }
+        }
+        return operation()
+    }
+
+    private fun extractFullTypeInfo(xValue: XValue): TypeInfo {
+        try {
+            if (xValue !is JavaValue) return TypeInfo("Unknown")
+            val jdiType = xValue.descriptor.type ?: return TypeInfo("Unknown")
+
+            val isInterface = jdiType is com.sun.jdi.InterfaceType
+            val isEnum = (jdiType as? com.sun.jdi.ClassType)?.isEnum ?: false
+            val genericSignature = (jdiType as? com.sun.jdi.ReferenceType)?.genericSignature()
+            val modifiers = (jdiType as? com.sun.jdi.ReferenceType)?.modifiers() ?: 0
+            val isSynthetic = (modifiers and ACC_SYNTHETIC) != 0
+
+            return TypeInfo(
+                rawType = jdiType.name(),
+                genericSignature = genericSignature,
+                isInterface = isInterface,
+                isEnum = isEnum,
+                isLambda = isSynthetic && jdiType.name().contains("$\$Lambda$")
             )
+        } catch (e: Exception) {
+            thisLogger().error("Failed to extract full type info", e)
+            return TypeInfo("Unknown")
+        }
+    }
+
+    private fun extractArrayInfo(xValue: XValue): Pair<Int?, List<Variable>?> {
+        try {
+            if (xValue !is JavaValue) return null to null
+
+            val value = xValue.descriptor.calcValue(xValue.evaluationContext)
+            if (value !is ArrayReference) return null to null
+
+            val length = value.length()
+            val elements = if (length in 1..MAX_ARRAY_PREVIEW_SIZE) {
+                value.getValues(0, min(length, MAX_ARRAY_PREVIEW_SIZE))
+                    .mapIndexed { index, element ->
+                        Variable(
+                            name = "[$index]",
+                            value = element?.toString() ?: "null",
+                            type = element?.type()?.name() ?: "Object"
+                        )
+                    }
+            } else {
+                null
+            }
+            return length to elements
+        } catch (e: Exception) {
+            thisLogger().warn("Failed to extract array info", e)
+            return null to null
+        }
+    }
+
+    private fun extractCollectionSize(xValue: XValue): Int? {
+        try {
+            if (xValue !is JavaValue) return null
+
+            val value = xValue.descriptor.calcValue(xValue.evaluationContext)
+            if (value !is ObjectReference) return null
+
+            val refType = value.referenceType()
+            val sizeMethod = refType.methodsByName("size", "()I").firstOrNull { it.argumentTypes().isEmpty() }
+                ?: return null
+
+            val thread = xValue.evaluationContext.suspendContext.thread?.threadReference
+            val result = thread?.let { value.invokeMethod(it, sizeMethod, emptyList(), 0) }
+            return (result as? IntegerValue)?.value()
+        } catch (e: Exception) {
+            thisLogger().warn("Failed to extract collection size", e)
+            return null
+        }
+    }
+
+    private data class VariableModifiers(
+        val accessModifiers: List<String>,
+        val isStatic: Boolean,
+        val isFinal: Boolean
+    )
+
+    private fun extractModifiers(xValue: XValue): VariableModifiers {
+        try {
+            if (xValue !is JavaValue) {
+                return VariableModifiers(listOf("unknown"), isStatic = false, isFinal = false)
+            }
+
+            return when (val descriptor = xValue.descriptor) {
+                is FieldDescriptorImpl -> {
+                    val field = descriptor.field
+                    val modifiers = mutableListOf<String>()
+                    if (field.isPublic) modifiers.add("public")
+                    else if (field.isPrivate) modifiers.add("private")
+                    else if (field.isProtected) modifiers.add("protected")
+                    else modifiers.add("package-private")
+                    VariableModifiers(
+                        accessModifiers = modifiers,
+                        isStatic = field.isStatic,
+                        isFinal = field.isFinal
+                    )
+                }
+
+                is LocalVariableDescriptorImpl -> {
+                    VariableModifiers(
+                        accessModifiers = listOf("local"),
+                        isStatic = false,
+                        isFinal = false
+                    )
+                }
+
+                else -> VariableModifiers(listOf("unknown"), isStatic = false, isFinal = false)
+            }
+        } catch (e: Exception) {
+            thisLogger().warn("Failed to extract modifiers", e)
+            return VariableModifiers(listOf("unknown"), isStatic = false, isFinal = false)
+        }
+    }
+
+    private fun extractObjectId(xValue: XValue, presentationValue: String?): String? {
+        try {
+            if (xValue !is JavaValue) {
+                return extractObjectIdFromPresentation(presentationValue)
+            }
+            val evaluationResult = xValue.descriptor.calcValue(xValue.evaluationContext)
+            if (evaluationResult is ObjectReference) {
+                return evaluationResult.uniqueID().toString()
+            }
+            return extractObjectIdFromPresentation(presentationValue)
+        } catch (e: Exception) {
+            thisLogger().warn("Failed to extract object ID", e)
+            return extractObjectIdFromPresentation(presentationValue)
+        }
+    }
+
+    private fun extractObjectIdFromPresentation(presentationValue: String?): String? {
+        return presentationValue?.let { value ->
+            val atIndex = value.lastIndexOf('@')
+            if (atIndex != -1 && atIndex < value.length - 1) {
+                val idPart = value.substring(atIndex + 1).split(' ')[0]
+                if (idPart.matches(Regex("[0-9a-fA-F]+"))) {
+                    idPart
+                } else null
+            } else null
+        }
+    }
+
+    private fun extractChildrenVariables(
+        xValue: XValue,
+        currentDepth: Int,
+        maxDepth: Int
+    ): Map<String, Variable> {
+        try {
+            val childrenFuture = AsyncDebuggerUtils.fetchValueChildrenAsync(xValue)
+            val rawChildren = AsyncDebuggerUtils.safeGet(childrenFuture, DEFAULT_TIMEOUT_SECONDS, emptyList())
+
+            return rawChildren.associate { (childName, childValue) ->
+                childName.let {
+                    it to convertXValueToVariable(
+                        it,
+                        childValue,
+                        currentDepth + 1,
+                        maxDepth
+                    )
+                }
+            }
         } catch (ex: Exception) {
-            // Even fallback failed, add minimal info
-            variables["error"] = Variable(
-                name = "error",
-                value = "Unable to extract variables: ${ex.message}",
-                type = "Error"
+            thisLogger().error("Error extracting children variables", ex)
+            return mapOf(
+                "error" to Variable(
+                    name = "error",
+                    value = "Failed to extract children: ${ex.message}",
+                    type = "Error",
+                    isError = true
+                )
             )
         }
     }

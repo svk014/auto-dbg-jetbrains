@@ -2,15 +2,12 @@ package com.github.svk014.autodbgjetbrains.debugger.java
 
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.FrameRetriever
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
+import com.github.svk014.autodbgjetbrains.debugger.utils.AsyncDebuggerUtils
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
-import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.debugger.engine.JavaStackFrame
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.xdebugger.XDebugSession
-import com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer
-import java.util.concurrent.CompletableFuture
-import java.util.concurrent.TimeUnit
 
 class JavaFrameRetriever(private val project: Project) : FrameRetriever {
 
@@ -40,35 +37,10 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
         val activeExecutionStack =
             suspendContext.activeExecutionStack ?: throw IllegalStateException("No active execution stack available")
 
-        val framesFuture = CompletableFuture<List<JavaStackFrame>>()
-        val allFrames = mutableListOf<JavaStackFrame>()
+        val framesFuture = AsyncDebuggerUtils.fetchStackFramesAsync(activeExecutionStack)
+        val allFrames = AsyncDebuggerUtils.safeGet(framesFuture, 5, emptyList())
 
-        activeExecutionStack.computeStackFrames(0, createStackFrameContainer(framesFuture, allFrames))
-
-        return framesFuture.get(5, TimeUnit.SECONDS)
-    }
-
-    private fun createStackFrameContainer(
-        framesFuture: CompletableFuture<List<JavaStackFrame>>, allFrames: MutableList<JavaStackFrame>
-    ) = object : XStackFrameContainer {
-
-        override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
-            try {
-                val javaFrames = stackFrames.filterIsInstance<JavaStackFrame>()
-                allFrames.addAll(javaFrames)
-                if (last) {
-                    framesFuture.complete(allFrames.toList())
-                }
-            } catch (e: Exception) {
-                framesFuture.completeExceptionally(e)
-            }
-        }
-
-        override fun errorOccurred(errorMessage: String) {
-            framesFuture.completeExceptionally(
-                RuntimeException("Stack frame computation failed: $errorMessage")
-            )
-        }
+        return allFrames.filterIsInstance<JavaStackFrame>()
     }
 
     private fun extractFrameInfo(frames: List<JavaStackFrame>, depth: Int): FrameInfo? {
