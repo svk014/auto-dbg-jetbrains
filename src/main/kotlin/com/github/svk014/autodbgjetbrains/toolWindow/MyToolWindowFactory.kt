@@ -10,6 +10,7 @@ import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import java.awt.BorderLayout
+import java.awt.Color
 import java.awt.GridLayout
 import javax.swing.*
 
@@ -57,13 +58,62 @@ class MyToolWindowFactory : ToolWindowFactory {
             // Get the API server service
             val apiServer = toolWindow.project.service<DebuggerApiServer>()
 
-            // Create server control panel
-            val serverPanel = JPanel(GridLayout(3, 2, 5, 5))
+            // Create server control panel (button row)
             val serverStatusLabel = JLabel("Status: Stopped")
             val serverUrlLabel = JLabel("URL: Not running")
-            val startServerButton = JButton("Start Server")
-            val stopServerButton = JButton("Stop Server").apply { isEnabled = false }
+            val startServerButton = JButton("▶").apply {
+                toolTipText = "Start Server"
+                background = Color(0x4CAF50) // Green
+                foreground = Color.WHITE
+                font = font.deriveFont(font.size * 1.5f)
+                isOpaque = true
+                isBorderPainted = false
+                preferredSize = java.awt.Dimension(48, 48)
+                minimumSize = java.awt.Dimension(48, 48)
+                maximumSize = java.awt.Dimension(48, 48)
+                horizontalAlignment = SwingConstants.CENTER
+                verticalAlignment = SwingConstants.CENTER
+            }
+            val stopServerButton = JButton("■").apply {
+                toolTipText = "Stop Server"
+                background = Color(0xF44336) // Red
+                foreground = Color.WHITE
+                font = font.deriveFont(font.size * 1.5f)
+                isOpaque = true
+                isBorderPainted = false
+                isEnabled = false
+                preferredSize = java.awt.Dimension(48, 48)
+                minimumSize = java.awt.Dimension(48, 48)
+                maximumSize = java.awt.Dimension(48, 48)
+                horizontalAlignment = SwingConstants.CENTER
+                verticalAlignment = SwingConstants.CENTER
+            }
             val copyUrlButton = JButton("Copy API URL")
+            val serverButtonPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.X_AXIS)
+                add(startServerButton)
+                add(Box.createHorizontalStrut(12))
+                add(stopServerButton)
+            }
+
+            // Create server info panel (status, url, copy)
+            val serverInfoPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                border = BorderFactory.createTitledBorder("REST API Server")
+                add(serverStatusLabel)
+                add(Box.createVerticalStrut(4))
+                add(serverUrlLabel)
+                add(Box.createVerticalStrut(4))
+                add(copyUrlButton)
+            }
+
+            // Main server section panel
+            val serverSectionPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                add(serverButtonPanel)
+                add(Box.createVerticalStrut(12))
+                add(serverInfoPanel)
+            }
 
             // Create API endpoints dropdown panel
             val apiPanel = JPanel(BorderLayout())
@@ -151,18 +201,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                 updateUiForServerState()
             }
 
-            // Add serverPanel components
-            serverPanel.border = BorderFactory.createTitledBorder("REST API Server")
-            serverPanel.add(serverStatusLabel)
-            serverPanel.add(startServerButton)
-            serverPanel.add(serverUrlLabel)
-            serverPanel.add(stopServerButton)
-            serverPanel.add(JLabel("Discovery Endpoint:"))
-            serverPanel.add(copyUrlButton)
-
-            // Initial UI sync
-            updateUiForServerState()
-
             // Create debug session control panel
             val debugPanel = JPanel(GridLayout(2, 2, 5, 5)).apply {
                 border = BorderFactory.createTitledBorder("Debug Session Control")
@@ -205,6 +243,16 @@ class MyToolWindowFactory : ToolWindowFactory {
                 add(pauseButton)
             }
 
+            // Layout the panels
+            val controlsPanel = JPanel(BorderLayout()).apply {
+                add(serverSectionPanel, BorderLayout.NORTH)
+                add(Box.createVerticalStrut(24), BorderLayout.CENTER) // gap between sections
+                add(apiPanel, BorderLayout.SOUTH)
+                add(debugPanel, BorderLayout.EAST)
+            }
+
+            add(controlsPanel, BorderLayout.NORTH)
+
             // Create log panel
             val logTextArea = JTextArea(15, 50).apply {
                 isEditable = false
@@ -219,14 +267,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                 border = BorderFactory.createTitledBorder("Logs")
             }
 
-            // Layout the panels
-            val controlsPanel = JPanel(BorderLayout()).apply {
-                add(serverPanel, BorderLayout.NORTH)
-                add(apiPanel, BorderLayout.CENTER)
-                add(debugPanel, BorderLayout.SOUTH)
-            }
-
-            add(controlsPanel, BorderLayout.NORTH)
             add(logScrollPane, BorderLayout.CENTER)
         }
     }
