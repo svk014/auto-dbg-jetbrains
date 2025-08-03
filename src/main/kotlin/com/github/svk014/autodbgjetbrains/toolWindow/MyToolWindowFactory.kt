@@ -212,18 +212,23 @@ class MyToolWindowFactory : ToolWindowFactory {
             // 1. REST API Server Section - Fix layout and remove redundant text
             val serverStatusLabel = JLabel().apply {
                 foreground = HEADER_COLOR
-                font = font.deriveFont(Font.BOLD, 14f)
+                font = font.deriveFont(Font.PLAIN, 11f) // Use smaller plain font instead of HTML
+                // Set fixed dimensions upfront to prevent any layout shifts
+                preferredSize = Dimension(70, 16)
+                minimumSize = Dimension(70, 16)
+                maximumSize = Dimension(70, 16)
+                horizontalAlignment = SwingConstants.LEFT
             }
 
-            // Function to update server status with proper font sizing
+            // Function to update server status with plain text (no HTML)
             fun updateServerStatusLabel(isRunning: Boolean) {
                 if (isRunning) {
-                    val statusText = "🟢 Running"
-                    serverStatusLabel.text = "<html><span style='font-size: 11px;'>$statusText</span></html>"
+                    serverStatusLabel.text = "🟢 Running"
                 } else {
-                    val statusText = "⭕ Stopped"
-                    serverStatusLabel.text = "<html><span style='font-size: 11px;'>$statusText</span></html>"
+                    serverStatusLabel.text = "⭕ Stopped"
                 }
+                // Force revalidation to ensure size constraints are respected
+                serverStatusLabel.revalidate()
             }
 
             // Initialize with server status
@@ -293,11 +298,56 @@ class MyToolWindowFactory : ToolWindowFactory {
                     add(serverStatusLabel)
                 }
 
+                // Create a panel for port with left alignment
+                val portPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+                    background = SECTION_BG
+                    add(portLabel)
+                }
+
+                // API Explorer dropdown and copy button moved here
+                val apiEndpoints = listOf(
+                    "GET /api/debugger/frame/{depth}",
+                    "GET /api/debugger/variables/{frameIndex}",
+                    "GET /api/debugger/call-stack",
+                    "POST /api/debugger/breakpoint",
+                    "GET /api/debugger/evaluate"
+                )
+
+                val apiDropdown = JComboBox(apiEndpoints.toTypedArray()).apply {
+                    background = Color(0x4C4C4C)
+                    foreground = TEXT_COLOR
+                    font = Font("Courier New", Font.PLAIN, 12)
+                    border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
+                }
+
+                val apiExplorerPanel = JPanel(BorderLayout(8, 0)).apply {
+                    background = SECTION_BG
+                    add(apiDropdown, BorderLayout.CENTER)
+
+                    val copyApiButton = createStyledButton("📋 Copy", BLUE_COLOR, "Copy API endpoint")
+                    copyApiButton.addActionListener {
+                        val selectedEndpoint = apiDropdown.selectedItem as? String
+                        if (selectedEndpoint != null) {
+                            val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
+                            val endpoint = selectedEndpoint.substringAfter(" ") // Remove HTTP method
+                            val fullUrl = "$baseUrl$endpoint"
+
+                            val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+                            val selection = StringSelection(fullUrl)
+                            clipboard.setContents(selection, selection)
+                            appendLog("[Auto DBG] API endpoint copied to clipboard: $fullUrl")
+                        }
+                    }
+                    add(copyApiButton, BorderLayout.EAST)
+                }
+
                 add(statusPanel)
                 add(Box.createVerticalStrut(8))
-                add(portLabel)
+                add(portPanel)
                 add(Box.createVerticalStrut(8))
                 add(urlPanel)
+                add(Box.createVerticalStrut(8))
+                add(apiExplorerPanel) // Added API explorer here
                 add(Box.createVerticalStrut(12))
                 add(serverButtonsPanel)
             }
@@ -309,10 +359,16 @@ class MyToolWindowFactory : ToolWindowFactory {
                 border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
             }
 
-            val sessionControlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
+            val sessionControlsPanel = JPanel(BorderLayout(8, 8)).apply { // Reduced gap from 12 to 8
                 background = SECTION_BG
-                add(sessionDropdown)
-                add(Box.createHorizontalStrut(12))
+
+                // Make dropdown take up remaining width with smaller minimum
+                sessionDropdown.apply {
+                    preferredSize = Dimension(120, preferredSize.height) // Reduced from 200 to 120
+                    minimumSize = Dimension(80, preferredSize.height) // Reduced from 150 to 80
+                }
+
+                add(sessionDropdown, BorderLayout.CENTER)
 
                 val refreshButton = createStyledButton("⟳ Refresh", BLUE_COLOR, "Refresh debug sessions")
                 refreshButton.addActionListener {
@@ -324,7 +380,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                         appendLog("[Auto DBG] No active debug sessions found.")
                     }
                 }
-                add(refreshButton)
+                add(refreshButton, BorderLayout.EAST)
             }
 
             val sessionButtonsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
@@ -358,43 +414,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                 add(sessionButtonsPanel)
             }
 
-            // 3. API Explorer Section - Change to dropdown with endpoints from swagger.yaml
-            val apiEndpoints = listOf(
-                "GET /api/debugger/frame/{depth}",
-                "GET /api/debugger/variables/{frameIndex}",
-                "GET /api/debugger/call-stack",
-                "POST /api/debugger/breakpoint",
-                "GET /api/debugger/evaluate"
-            )
-
-            val apiDropdown = JComboBox(apiEndpoints.toTypedArray()).apply {
-                background = Color(0x4C4C4C)
-                foreground = TEXT_COLOR
-                font = Font("Courier New", Font.PLAIN, 12)
-                border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
-            }
-
-            val apiExplorerPanel = JPanel(BorderLayout(12, 0)).apply {
-                background = SECTION_BG
-                add(apiDropdown, BorderLayout.CENTER)
-
-                val copyApiButton = createStyledButton("📋 Copy", BLUE_COLOR, "Copy API endpoint")
-                copyApiButton.addActionListener {
-                    val selectedEndpoint = apiDropdown.selectedItem as? String
-                    if (selectedEndpoint != null) {
-                        val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
-                        val endpoint = selectedEndpoint.substringAfter(" ") // Remove HTTP method
-                        val fullUrl = "$baseUrl$endpoint"
-
-                        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
-                        val selection = StringSelection(fullUrl)
-                        clipboard.setContents(selection, selection)
-                        appendLog("[Auto DBG] API endpoint copied to clipboard: $fullUrl")
-                    }
-                }
-                add(copyApiButton, BorderLayout.EAST)
-            }
-
             // 4. Logs Section
             val logTextArea = JTextArea().apply {
                 isEditable = false
@@ -425,12 +444,10 @@ class MyToolWindowFactory : ToolWindowFactory {
                 add(logScrollPane, BorderLayout.CENTER)
             }
 
-            // Add all sections to the main panel (remove static header text)
-            mainPanel.add(createSection("����️ REST API Server", serverContentPanel))
+            // Add all sections to the main panel - removed API Explorer section
+            mainPanel.add(createSection("✅ REST API Server", serverContentPanel))
             mainPanel.add(Box.createVerticalStrut(16))
             mainPanel.add(createSection("🐞 Debug Session", debugContentPanel))
-            mainPanel.add(Box.createVerticalStrut(16))
-            mainPanel.add(createSection("🔍 API Explorer", apiExplorerPanel))
             mainPanel.add(Box.createVerticalStrut(16))
             mainPanel.add(createSection("📜 Logs", logContentPanel))
 
