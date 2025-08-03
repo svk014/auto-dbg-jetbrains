@@ -10,6 +10,7 @@ import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
 import java.awt.*
 import java.awt.datatransfer.StringSelection
+import java.awt.event.MouseWheelEvent
 import javax.swing.*
 import javax.swing.border.CompoundBorder
 
@@ -171,24 +172,18 @@ class MyToolWindowFactory : ToolWindowFactory {
                         add(headerLabel)
                     }
 
-                    // Add content with padding
+                    // Add content with padding - removed horizontal padding
                     val paddedContent = JPanel(BorderLayout()).apply {
                         background = SECTION_BG
-                        border = BorderFactory.createEmptyBorder(16, 24, 24, 24)
+                        border = BorderFactory.createEmptyBorder(16, 0, 24, 0) // Only top and bottom padding
                         add(content, BorderLayout.CENTER)
                     }
 
                     add(headerPanel, BorderLayout.NORTH)
                     add(paddedContent, BorderLayout.CENTER)
 
-                    // Add rounded border with shadow effect
-                    border = CompoundBorder(
-                        BorderFactory.createEmptyBorder(8, 8, 8, 8),
-                        BorderFactory.createCompoundBorder(
-                            BorderFactory.createLineBorder(BORDER_COLOR, 1, true),
-                            BorderFactory.createEmptyBorder(12, 0, 0, 0)
-                        )
-                    )
+                    // Removed rounded border and shadow - only basic padding remains
+                    border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
                 }
             }
         }
@@ -245,7 +240,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     foreground = TEXT_COLOR
                     font = font.deriveFont(12f)
                 }
-                val copyUrlButton = createStyledButton("📋 Copy", BLUE_COLOR, "Copy URL to clipboard")
+                val copyUrlButton = createStyledButton("\uD83D\uDCC4 Copy", BLUE_COLOR, "Copy URL to clipboard")
 
                 copyUrlButton.addActionListener {
                     val url = apiServer.getServerUrl()
@@ -324,7 +319,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     background = SECTION_BG
                     add(apiDropdown, BorderLayout.CENTER)
 
-                    val copyApiButton = createStyledButton("📋 Copy", BLUE_COLOR, "Copy API endpoint")
+                    val copyApiButton = createStyledButton("\uD83D\uDCC4 Copy", BLUE_COLOR, "Copy API endpoint")
                     copyApiButton.addActionListener {
                         val selectedEndpoint = apiDropdown.selectedItem as? String
                         if (selectedEndpoint != null) {
@@ -370,7 +365,7 @@ class MyToolWindowFactory : ToolWindowFactory {
 
                 add(sessionDropdown, BorderLayout.CENTER)
 
-                val refreshButton = createStyledButton("⟳ Refresh", BLUE_COLOR, "Refresh debug sessions")
+                val refreshButton = createStyledButton("↻ Refresh", BLUE_COLOR, "Refresh debug sessions")
                 refreshButton.addActionListener {
                     val sessionNames = debuggerService.refreshAndGetActiveSessionNames()
                     sessionDropdown.model = DefaultComboBoxModel(sessionNames.toTypedArray())
@@ -385,7 +380,7 @@ class MyToolWindowFactory : ToolWindowFactory {
 
             val sessionButtonsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
                 background = SECTION_BG
-                val connectButton = createStyledButton("🔌 Connect", GREEN_COLOR, "Connect to selected session")
+                val connectButton = createStyledButton("⇄ Connect", GREEN_COLOR, "Connect to selected session")
                 val pauseButton = createStyledButton("⏸ Pause", Color(0xFF9800), "Pause current session")
 
                 connectButton.addActionListener {
@@ -445,19 +440,48 @@ class MyToolWindowFactory : ToolWindowFactory {
             }
 
             // Add all sections to the main panel - removed API Explorer section
-            mainPanel.add(createSection("✅ REST API Server", serverContentPanel))
+            mainPanel.add(createSection("REST API Server", serverContentPanel))
             mainPanel.add(Box.createVerticalStrut(16))
-            mainPanel.add(createSection("🐞 Debug Session", debugContentPanel))
+            mainPanel.add(createSection("Debug Session", debugContentPanel))
             mainPanel.add(Box.createVerticalStrut(16))
-            mainPanel.add(createSection("📜 Logs", logContentPanel))
+            mainPanel.add(createSection("Logs", logContentPanel))
 
-            // Wrap the main panel in a scroll pane to make the entire page scrollable
+            // Wrap the main panel in a scroll pane to make the entire page scrollable with optimized performance
             val scrollPane = JScrollPane(mainPanel).apply {
                 verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
                 horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
                 border = BorderFactory.createEmptyBorder()
                 background = DARK_BG
                 viewport.background = DARK_BG
+
+                // Performance optimizations for smoother scrolling
+                viewport.scrollMode = JViewport.BACKINGSTORE_SCROLL_MODE // Use backing store for better performance
+                verticalScrollBar.unitIncrement = 16 // Smoother scroll increments
+                verticalScrollBar.blockIncrement = 64 // Faster page scrolling
+
+                // Enable double buffering for smoother rendering
+                isDoubleBuffered = true
+                viewport.isDoubleBuffered = true
+
+                // Optimize viewport for faster repaints
+                viewport.putClientProperty("JViewport.isPaintingOrigin", true)
+
+                // Set preferred viewport size to avoid unnecessary layout calculations
+                viewport.preferredSize = null // Let it calculate naturally
+
+                // Add mouse wheel scroll optimization
+                addMouseWheelListener { e ->
+                    if (e.scrollType == MouseWheelEvent.WHEEL_UNIT_SCROLL) {
+                        val scrollAmount = e.scrollAmount * e.wheelRotation * 16
+                        val currentValue = verticalScrollBar.value
+                        val newValue = (currentValue + scrollAmount).coerceIn(
+                            verticalScrollBar.minimum,
+                            verticalScrollBar.maximum - verticalScrollBar.visibleAmount
+                        )
+                        verticalScrollBar.value = newValue
+                        e.consume()
+                    }
+                }
             }
 
             add(scrollPane, BorderLayout.CENTER)
