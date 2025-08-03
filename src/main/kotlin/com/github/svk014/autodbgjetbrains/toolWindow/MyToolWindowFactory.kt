@@ -1,7 +1,7 @@
 package com.github.svk014.autodbgjetbrains.toolWindow
 
-import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
+import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -37,6 +37,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     it.caretPosition = it.document.length
                 } ?: logBuffer.add(message)
             }
+
             fun flushLogs() {
                 logArea?.let { area ->
                     logBuffer.forEach { msg ->
@@ -57,59 +58,110 @@ class MyToolWindowFactory : ToolWindowFactory {
             val apiServer = toolWindow.project.service<DebuggerApiServer>()
 
             // Create server control panel
-            val serverPanel = JPanel(GridLayout(3, 2, 5, 5)).apply {
-                border = BorderFactory.createTitledBorder("REST API Server")
+            val serverPanel = JPanel(GridLayout(3, 2, 5, 5))
+            val serverStatusLabel = JLabel("Status: Stopped")
+            val serverUrlLabel = JLabel("URL: Not running")
+            val startServerButton = JButton("Start Server")
+            val stopServerButton = JButton("Stop Server").apply { isEnabled = false }
+            val copyUrlButton = JButton("Copy API URL")
 
-                val serverStatusLabel = JLabel("Status: Stopped")
-                val serverUrlLabel = JLabel("URL: Not running")
+            // Create API endpoints dropdown panel
+            val apiPanel = JPanel(BorderLayout())
+            val apiDropdown = JComboBox<String>()
+            val copyApiButton = JButton("Copy Endpoint")
+            copyApiButton.isEnabled = false
+            apiDropdown.isEnabled = false
+            apiPanel.border = BorderFactory.createTitledBorder("Available API Endpoints")
+            apiPanel.add(apiDropdown, BorderLayout.CENTER)
+            apiPanel.add(copyApiButton, BorderLayout.EAST)
 
-                val startServerButton = JButton("Start Server").apply {
-                    addActionListener {
-                        apiServer.startServer()
-                        // Update UI after server starts (with a small delay for startup)
-                        Timer(1000) {
-                            SwingUtilities.invokeLater {
-                                if (apiServer.isRunning()) {
-                                    serverStatusLabel.text = "Status: Running (Port: ${apiServer.getServerPort()})"
-                                    serverUrlLabel.text = "URL: ${apiServer.getServerUrl()}"
-                                    isEnabled = false
-                                    // Find the stop button in the parent panel and enable it
-                                    (parent as JPanel).components.find { it is JButton && it.text == "Stop Server" }?.isEnabled = true
-                                }
-                            }
-                        }.apply { isRepeats = false }.start()
-                    }
+            fun updateApiList(baseUrl: String?) {
+                if (baseUrl != null) {
+                    val endpoints = listOf(
+                        "$baseUrl/api/debugger/frame/{depth}",
+                        "$baseUrl/api/debugger/variables/{frameIndex}",
+                        "$baseUrl/api/debugger/call-stack",
+                        "$baseUrl/api/debugger/breakpoint (POST)",
+                        "$baseUrl/api/debugger/evaluate"
+                    )
+                    apiDropdown.model = DefaultComboBoxModel(endpoints.toTypedArray())
+                    apiDropdown.isEnabled = true
+                    copyApiButton.isEnabled = true
+                } else {
+                    apiDropdown.model = DefaultComboBoxModel(arrayOf("Server not running"))
+                    apiDropdown.isEnabled = false
+                    copyApiButton.isEnabled = false
                 }
-
-                val stopServerButton = JButton("Stop Server").apply {
-                    isEnabled = false
-                    addActionListener {
-                        apiServer.stopServer()
-                        serverStatusLabel.text = "Status: Stopped"
-                        serverUrlLabel.text = "URL: Not running"
-                        isEnabled = false
-                        startServerButton.isEnabled = true
-                    }
-                }
-
-                val copyUrlButton = JButton("Copy API URL").apply {
-                    addActionListener {
-                        apiServer.getServerUrl()?.let { url ->
-                            val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                            val selection = java.awt.datatransfer.StringSelection("$url/api/discovery/tools")
-                            clipboard.setContents(selection, selection)
-                            appendLog("[Auto DBG] API discovery URL copied to clipboard: $url/api/tools")
-                        } ?: appendLog("[Auto DBG] Server is not running")
-                    }
-                }
-
-                add(serverStatusLabel)
-                add(startServerButton)
-                add(serverUrlLabel)
-                add(stopServerButton)
-                add(JLabel("Discovery Endpoint:"))
-                add(copyUrlButton)
             }
+            // Expose for serverPanel to update
+            (apiPanel as JComponent).putClientProperty("updateApiList", ::updateApiList)
+
+            // API copy button
+            copyApiButton.addActionListener {
+                val selected = apiDropdown.selectedItem as? String
+                if (selected != null) {
+                    val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                    val selection = java.awt.datatransfer.StringSelection(selected)
+                    clipboard.setContents(selection, selection)
+                    appendLog("[Auto DBG] API endpoint copied to clipboard: $selected")
+                }
+            }
+
+            // Server copy button
+            copyUrlButton.addActionListener {
+                val url = apiServer.getServerUrl()
+                if (url != null) {
+                    val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
+                    val selection = java.awt.datatransfer.StringSelection(url)
+                    clipboard.setContents(selection, selection)
+                    appendLog("[Auto DBG] API base URL copied to clipboard: $url")
+                } else {
+                    appendLog("[Auto DBG] Server is not running")
+                }
+            }
+
+            // UI update function
+            fun updateUiForServerState() {
+                if (apiServer.isRunning()) {
+                    serverStatusLabel.text = "Status: Running (Port: ${apiServer.getServerPort()})"
+                    serverUrlLabel.text = "URL: ${apiServer.getServerUrl()}"
+                    startServerButton.isEnabled = false
+                    stopServerButton.isEnabled = true
+                    updateApiList(apiServer.getServerUrl())
+                } else {
+                    serverStatusLabel.text = "Status: Stopped"
+                    serverUrlLabel.text = "URL: Not running"
+                    startServerButton.isEnabled = true
+                    stopServerButton.isEnabled = false
+                    updateApiList(null)
+                }
+            }
+
+            // Server button listeners
+            startServerButton.addActionListener {
+                apiServer.startServer()
+                Timer(1000) {
+                    SwingUtilities.invokeLater {
+                        updateUiForServerState()
+                    }
+                }.apply { isRepeats = false }.start()
+            }
+            stopServerButton.addActionListener {
+                apiServer.stopServer()
+                updateUiForServerState()
+            }
+
+            // Add serverPanel components
+            serverPanel.border = BorderFactory.createTitledBorder("REST API Server")
+            serverPanel.add(serverStatusLabel)
+            serverPanel.add(startServerButton)
+            serverPanel.add(serverUrlLabel)
+            serverPanel.add(stopServerButton)
+            serverPanel.add(JLabel("Discovery Endpoint:"))
+            serverPanel.add(copyUrlButton)
+
+            // Initial UI sync
+            updateUiForServerState()
 
             // Create debug session control panel
             val debugPanel = JPanel(GridLayout(2, 2, 5, 5)).apply {
@@ -159,11 +211,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                 lineWrap = true
                 wrapStyleWord = true
                 append("[Auto DBG] Tool window loaded!\n")
-                append("[Auto DBG] Available API endpoints:\n")
-                append("- GET /api/tools (Discovery)\n")
-                append("- GET /api/debugger/frame/{depth}\n")
-                append("- GET /api/debugger/callstack?maxDepth=10\n")
-                append("- GET /api/debugger/variables?frameId=&maxDepth=3\n")
             }
             logArea = logTextArea
             flushLogs()
@@ -175,7 +222,8 @@ class MyToolWindowFactory : ToolWindowFactory {
             // Layout the panels
             val controlsPanel = JPanel(BorderLayout()).apply {
                 add(serverPanel, BorderLayout.NORTH)
-                add(debugPanel, BorderLayout.CENTER)
+                add(apiPanel, BorderLayout.CENTER)
+                add(debugPanel, BorderLayout.SOUTH)
             }
 
             add(controlsPanel, BorderLayout.NORTH)
