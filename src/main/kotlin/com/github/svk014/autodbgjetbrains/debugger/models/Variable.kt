@@ -1,6 +1,6 @@
 package com.github.svk014.autodbgjetbrains.debugger.models
 
-import com.github.svk014.autodbgjetbrains.debugger.java.TypeInfo
+import com.github.svk014.autodbgjetbrains.debugger.models.TypeInfo
 import kotlinx.serialization.Serializable
 
 /**

@@ -1,4 +1,4 @@
-package com.github.svk014.autodbgjetbrains.debugger.java
+package com.github.svk014.autodbgjetbrains.debugger.models
 
 import kotlinx.serialization.Serializable
 
@@ -10,4 +10,3 @@ data class TypeInfo(
     val isEnum: Boolean = false,
     val isLambda: Boolean = false
 )
-

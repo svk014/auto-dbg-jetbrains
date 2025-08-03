@@ -1,4 +1,4 @@
-package com.github.svk014.autodbgjetbrains.debugger.java
+package com.github.svk014.autodbgjetbrains.debugger.models
 
 sealed class VariableExtractionError : Exception() {
     data class TimeoutError(override val message: String) : VariableExtractionError()
@@ -6,4 +6,3 @@ sealed class VariableExtractionError : Exception() {
     data class InvalidFrame(override val message: String) : VariableExtractionError()
     data class ValueComputationError(override val message: String) : VariableExtractionError()
 }
-

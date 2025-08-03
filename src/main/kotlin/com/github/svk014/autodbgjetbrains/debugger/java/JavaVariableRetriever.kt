@@ -1,13 +1,15 @@
 package com.github.svk014.autodbgjetbrains.debugger.java
 
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
+import com.github.svk014.autodbgjetbrains.debugger.models.TypeInfo
 import com.github.svk014.autodbgjetbrains.debugger.models.Variable
+import com.github.svk014.autodbgjetbrains.debugger.models.VariableExtractionError
+import com.github.svk014.autodbgjetbrains.debugger.models.VariableModifiers
 import com.github.svk014.autodbgjetbrains.debugger.utils.AsyncDebuggerUtils
 import com.intellij.debugger.engine.JavaValue
 import com.intellij.debugger.ui.impl.watch.FieldDescriptorImpl
 import com.intellij.debugger.ui.impl.watch.LocalVariableDescriptorImpl
 import com.intellij.openapi.diagnostic.thisLogger
-import com.intellij.openapi.editor.colors.TextAttributesKey
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.frame.*
@@ -134,47 +136,7 @@ class JavaVariableRetriever(private val project: Project) : VariableRetriever {
 
             override fun setPresentation(icon: Icon?, presentation: XValuePresentation, hasChildren: Boolean) {
                 val valueBuilder = StringBuilder()
-                presentation.renderValue(object : XValuePresentation.XValueTextRenderer {
-                    override fun renderValue(value: String) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderValue(value: String, attributes: TextAttributesKey) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderStringValue(value: String) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderStringValue(
-                        value: String,
-                        prefix: String?,
-                        maxLength: Int
-                    ) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderNumericValue(value: String) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderKeywordValue(value: String) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderComment(value: String) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderSpecialSymbol(value: String) {
-                        valueBuilder.append(value)
-                    }
-
-                    override fun renderError(value: String) {
-                        valueBuilder.append(value)
-                    }
-                })
+                presentation.renderValue(ValueTextRenderer(valueBuilder))
 
                 handlePresentation(
                     name,
@@ -355,12 +317,6 @@ class JavaVariableRetriever(private val project: Project) : VariableRetriever {
             return null
         }
     }
-
-    private data class VariableModifiers(
-        val accessModifiers: List<String>,
-        val isStatic: Boolean,
-        val isFinal: Boolean
-    )
 
     private fun extractModifiers(xValue: XValue): VariableModifiers {
         try {
