@@ -3,22 +3,17 @@ package com.github.svk014.autodbgjetbrains.toolWindow
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
 import com.intellij.openapi.components.service
-import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
 import com.intellij.openapi.wm.ToolWindowFactory
 import com.intellij.ui.components.JBPanel
 import com.intellij.ui.content.ContentFactory
-import java.awt.BorderLayout
-import java.awt.Color
-import java.awt.GridLayout
+import java.awt.*
+import java.awt.datatransfer.StringSelection
 import javax.swing.*
+import javax.swing.border.CompoundBorder
 
 class MyToolWindowFactory : ToolWindowFactory {
-
-    init {
-        thisLogger().warn("Don't forget to remove all non-needed sample code files with their corresponding registration entries in `plugin.xml`.")
-    }
 
     override fun createToolWindowContent(project: Project, toolWindow: ToolWindow) {
         val myToolWindow = MyToolWindow(toolWindow)
@@ -32,6 +27,17 @@ class MyToolWindowFactory : ToolWindowFactory {
         companion object {
             private var logArea: JTextArea? = null
             private val logBuffer = mutableListOf<String>()
+
+            // Dark theme colors
+            private val DARK_BG = Color(0x2B2B2B)
+            private val SECTION_BG = Color(0x3C3F41)
+            private val TEXT_COLOR = Color(0xBBBBBB)
+            private val HEADER_COLOR = Color(0xE6E6E6)
+            private val GREEN_COLOR = Color(0x4CAF50)
+            private val RED_COLOR = Color(0xF44336)
+            private val BLUE_COLOR = Color(0x2196F3)
+            private val BORDER_COLOR = Color(0x555555)
+
             fun appendLog(message: String) {
                 logArea?.let {
                     it.append(message + "\n")
@@ -48,226 +54,430 @@ class MyToolWindowFactory : ToolWindowFactory {
                     logBuffer.clear()
                 }
             }
+
+            // Custom button class that extends JComponent
+            private class StyledButton(
+                private val text: String,
+                private val bgColor: Color,
+                tooltipText: String? = null
+            ) : JComponent() {
+                private var isHovered = false
+                private var isPressed = false
+                private val actionListeners = mutableListOf<java.awt.event.ActionListener>()
+                private var isButtonEnabled = true
+
+                init {
+                    preferredSize = Dimension(100, 36)
+                    minimumSize = Dimension(80, 36)
+                    cursor = Cursor.getPredefinedCursor(Cursor.HAND_CURSOR)
+                    tooltipText?.let { toolTipText = it }
+                    isOpaque = false
+
+                    // Add mouse listeners for hover and click effects
+                    addMouseListener(object : java.awt.event.MouseAdapter() {
+                        override fun mouseEntered(e: java.awt.event.MouseEvent) {
+                            if (isButtonEnabled) {
+                                isHovered = true
+                                repaint()
+                            }
+                        }
+
+                        override fun mouseExited(e: java.awt.event.MouseEvent) {
+                            isHovered = false
+                            repaint()
+                        }
+
+                        override fun mousePressed(e: java.awt.event.MouseEvent) {
+                            if (isButtonEnabled) {
+                                isPressed = true
+                                repaint()
+                            }
+                        }
+
+                        override fun mouseReleased(e: java.awt.event.MouseEvent) {
+                            if (isButtonEnabled && isPressed) {
+                                isPressed = false
+                                repaint()
+                                val event = java.awt.event.ActionEvent(this@StyledButton, java.awt.event.ActionEvent.ACTION_PERFORMED, text)
+                                actionListeners.forEach { it.actionPerformed(event) }
+                            }
+                        }
+                    })
+                }
+
+                fun addActionListener(listener: java.awt.event.ActionListener) {
+                    actionListeners.add(listener)
+                }
+
+                override fun setEnabled(enabled: Boolean) {
+                    isButtonEnabled = enabled
+                    cursor = if (enabled) Cursor.getPredefinedCursor(Cursor.HAND_CURSOR) else Cursor.getDefaultCursor()
+                    repaint()
+                }
+
+                override fun isEnabled(): Boolean = isButtonEnabled
+
+                override fun paintComponent(g: Graphics) {
+                    super.paintComponent(g)
+                    val g2 = g.create() as Graphics2D
+                    g2.setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
+                    g2.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON)
+
+                    // Calculate colors based on state
+                    val currentBgColor = when {
+                        !isButtonEnabled -> Color(bgColor.red / 2, bgColor.green / 2, bgColor.blue / 2)
+                        isPressed -> bgColor.darker()
+                        isHovered -> Color(
+                            minOf(255, (bgColor.red * 1.2).toInt()),
+                            minOf(255, (bgColor.green * 1.2).toInt()),
+                            minOf(255, (bgColor.blue * 1.2).toInt())
+                        )
+                        else -> bgColor
+                    }
+
+                    // Paint background
+                    g2.color = currentBgColor
+                    g2.fillRoundRect(0, 0, width, height, 8, 8)
+
+                    // Paint text
+                    g2.color = if (isButtonEnabled) Color.WHITE else Color.LIGHT_GRAY
+                    g2.font = font.deriveFont(Font.BOLD, 12f)
+                    val fm = g2.fontMetrics
+                    val textWidth = fm.stringWidth(text)
+                    val x = (width - textWidth) / 2
+                    val y = (height - fm.height) / 2 + fm.ascent
+                    g2.drawString(text, x, y)
+
+                    g2.dispose()
+                }
+            }
+
+            private fun createStyledButton(text: String, bgColor: Color, tooltipText: String? = null): StyledButton {
+                return StyledButton(text, bgColor, tooltipText)
+            }
+
+            private fun createSection(title: String, content: JPanel): JPanel {
+                return JPanel().apply {
+                    layout = BorderLayout()
+                    background = SECTION_BG
+
+                    // Create header
+                    val headerPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+                        background = SECTION_BG
+                        val headerLabel = JLabel(title).apply {
+                            foreground = HEADER_COLOR
+                            font = font.deriveFont(Font.BOLD, 14f)
+                        }
+                        add(headerLabel)
+                    }
+
+                    // Add content with padding
+                    val paddedContent = JPanel(BorderLayout()).apply {
+                        background = SECTION_BG
+                        border = BorderFactory.createEmptyBorder(16, 24, 24, 24)
+                        add(content, BorderLayout.CENTER)
+                    }
+
+                    add(headerPanel, BorderLayout.NORTH)
+                    add(paddedContent, BorderLayout.CENTER)
+
+                    // Add rounded border with shadow effect
+                    border = CompoundBorder(
+                        BorderFactory.createEmptyBorder(8, 8, 8, 8),
+                        BorderFactory.createCompoundBorder(
+                            BorderFactory.createLineBorder(BORDER_COLOR, 1, true),
+                            BorderFactory.createEmptyBorder(12, 0, 0, 0)
+                        )
+                    )
+                }
+            }
         }
 
         private val debuggerService = toolWindow.project.service<DebuggerIntegrationService>()
 
         fun getContent() = JBPanel<JBPanel<*>>().apply {
             layout = BorderLayout()
+            background = DARK_BG
 
             // Get the API server service
             val apiServer = toolWindow.project.service<DebuggerApiServer>()
 
-            // Create server control panel (button row)
-            val serverStatusLabel = JLabel("Status: Stopped")
-            val serverUrlLabel = JLabel("URL: Not running")
-            val startServerButton = JButton("▶").apply {
-                toolTipText = "Start Server"
-                background = Color(0x4CAF50) // Green
-                foreground = Color.WHITE
-                font = font.deriveFont(font.size * 1.5f)
-                isOpaque = true
-                isBorderPainted = false
-                preferredSize = java.awt.Dimension(48, 48)
-                minimumSize = java.awt.Dimension(48, 48)
-                maximumSize = java.awt.Dimension(48, 48)
-                horizontalAlignment = SwingConstants.CENTER
-                verticalAlignment = SwingConstants.CENTER
-            }
-            val stopServerButton = JButton("■").apply {
-                toolTipText = "Stop Server"
-                background = Color(0xF44336) // Red
-                foreground = Color.WHITE
-                font = font.deriveFont(font.size * 1.5f)
-                isOpaque = true
-                isBorderPainted = false
-                isEnabled = false
-                preferredSize = java.awt.Dimension(48, 48)
-                minimumSize = java.awt.Dimension(48, 48)
-                maximumSize = java.awt.Dimension(48, 48)
-                horizontalAlignment = SwingConstants.CENTER
-                verticalAlignment = SwingConstants.CENTER
-            }
-            val copyUrlButton = JButton("Copy API URL")
-            val serverButtonPanel = JPanel().apply {
-                layout = BoxLayout(this, BoxLayout.X_AXIS)
-                add(startServerButton)
-                add(Box.createHorizontalStrut(12))
-                add(stopServerButton)
+            // Main container with vertical layout - make it scrollable
+            val mainPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                background = DARK_BG
+                border = BorderFactory.createEmptyBorder(16, 16, 16, 16)
             }
 
-            // Create server info panel (status, url, copy)
-            val serverInfoPanel = JPanel().apply {
-                layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                border = BorderFactory.createTitledBorder("REST API Server")
-                add(serverStatusLabel)
-                add(Box.createVerticalStrut(4))
-                add(serverUrlLabel)
-                add(Box.createVerticalStrut(4))
+            // 1. REST API Server Section - Fix layout and remove redundant text
+            val serverStatusLabel = JLabel().apply {
+                foreground = HEADER_COLOR
+                font = font.deriveFont(Font.BOLD, 14f)
+            }
+
+            // Function to update server status with proper font sizing
+            fun updateServerStatusLabel(isRunning: Boolean) {
+                if (isRunning) {
+                    val statusText = "🟢 Running"
+                    serverStatusLabel.text = "<html><span style='font-size: 11px;'>$statusText</span></html>"
+                } else {
+                    val statusText = "⭕ Stopped"
+                    serverStatusLabel.text = "<html><span style='font-size: 11px;'>$statusText</span></html>"
+                }
+            }
+
+            // Initialize with server status
+            updateServerStatusLabel(apiServer.isRunning())
+
+            val portLabel = JLabel("Port: ${if (apiServer.isRunning()) apiServer.getServerPort() else "Not running"}").apply {
+                foreground = TEXT_COLOR
+                font = font.deriveFont(12f)
+            }
+
+            val urlPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 4)).apply {
+                background = SECTION_BG
+                val urlLabel = JLabel("URL: ${apiServer.getServerUrl() ?: "Not running"}").apply {
+                    foreground = TEXT_COLOR
+                    font = font.deriveFont(12f)
+                }
+                val copyUrlButton = createStyledButton("📋 Copy", BLUE_COLOR, "Copy URL to clipboard")
+
+                copyUrlButton.addActionListener {
+                    val url = apiServer.getServerUrl()
+                    if (url != null) {
+                        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+                        val selection = StringSelection(url)
+                        clipboard.setContents(selection, selection)
+                        appendLog("[Auto DBG] API base URL copied to clipboard: $url")
+                    } else {
+                        appendLog("[Auto DBG] Server is not running")
+                    }
+                }
+
+                add(urlLabel)
+                add(Box.createHorizontalStrut(12))
                 add(copyUrlButton)
             }
 
-            // Main server section panel
-            val serverSectionPanel = JPanel().apply {
+            val serverButtonsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
+                background = SECTION_BG
+                val startButton = createStyledButton("▶ Start", GREEN_COLOR, "Start Server")
+                val stopButton = createStyledButton("■ Stop", RED_COLOR, "Stop Server")
+
+                startButton.addActionListener {
+                    apiServer.startServer()
+                    Timer(1000) {
+                        SwingUtilities.invokeLater {
+                            updateServerUI(apiServer, portLabel, urlPanel, startButton, stopButton, ::updateServerStatusLabel)
+                        }
+                    }.apply { isRepeats = false }.start()
+                }
+
+                stopButton.addActionListener {
+                    apiServer.stopServer()
+                    updateServerUI(apiServer, portLabel, urlPanel, startButton, stopButton, ::updateServerStatusLabel)
+                }
+
+                add(startButton)
+                add(Box.createHorizontalStrut(8))
+                add(stopButton)
+            }
+
+            val serverContentPanel = JPanel().apply {
                 layout = BoxLayout(this, BoxLayout.Y_AXIS)
-                add(serverButtonPanel)
+                background = SECTION_BG
+
+                // Create a panel for status with left alignment
+                val statusPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 0)).apply {
+                    background = SECTION_BG
+                    add(serverStatusLabel)
+                }
+
+                add(statusPanel)
+                add(Box.createVerticalStrut(8))
+                add(portLabel)
+                add(Box.createVerticalStrut(8))
+                add(urlPanel)
                 add(Box.createVerticalStrut(12))
-                add(serverInfoPanel)
+                add(serverButtonsPanel)
             }
 
-            // Create API endpoints dropdown panel
-            val apiPanel = JPanel(BorderLayout())
-            val apiDropdown = JComboBox<String>()
-            val copyApiButton = JButton("Copy Endpoint")
-            copyApiButton.isEnabled = false
-            apiDropdown.isEnabled = false
-            apiPanel.border = BorderFactory.createTitledBorder("Available API Endpoints")
-            apiPanel.add(apiDropdown, BorderLayout.CENTER)
-            apiPanel.add(copyApiButton, BorderLayout.EAST)
-
-            fun updateApiList(baseUrl: String?) {
-                if (baseUrl != null) {
-                    val endpoints = listOf(
-                        "$baseUrl/api/debugger/frame/{depth}",
-                        "$baseUrl/api/debugger/variables/{frameIndex}",
-                        "$baseUrl/api/debugger/call-stack",
-                        "$baseUrl/api/debugger/breakpoint (POST)",
-                        "$baseUrl/api/debugger/evaluate"
-                    )
-                    apiDropdown.model = DefaultComboBoxModel(endpoints.toTypedArray())
-                    apiDropdown.isEnabled = true
-                    copyApiButton.isEnabled = true
-                } else {
-                    apiDropdown.model = DefaultComboBoxModel(arrayOf("Server not running"))
-                    apiDropdown.isEnabled = false
-                    copyApiButton.isEnabled = false
-                }
-            }
-            // Expose for serverPanel to update
-            (apiPanel as JComponent).putClientProperty("updateApiList", ::updateApiList)
-
-            // API copy button
-            copyApiButton.addActionListener {
-                val selected = apiDropdown.selectedItem as? String
-                if (selected != null) {
-                    val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                    val selection = java.awt.datatransfer.StringSelection(selected)
-                    clipboard.setContents(selection, selection)
-                    appendLog("[Auto DBG] API endpoint copied to clipboard: $selected")
-                }
+            // 2. Debug Session Section
+            val sessionDropdown = JComboBox<String>().apply {
+                background = Color(0x4C4C4C)
+                foreground = TEXT_COLOR
+                border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
             }
 
-            // Server copy button
-            copyUrlButton.addActionListener {
-                val url = apiServer.getServerUrl()
-                if (url != null) {
-                    val clipboard = java.awt.Toolkit.getDefaultToolkit().systemClipboard
-                    val selection = java.awt.datatransfer.StringSelection(url)
-                    clipboard.setContents(selection, selection)
-                    appendLog("[Auto DBG] API base URL copied to clipboard: $url")
-                } else {
-                    appendLog("[Auto DBG] Server is not running")
-                }
-            }
-
-            // UI update function
-            fun updateUiForServerState() {
-                if (apiServer.isRunning()) {
-                    serverStatusLabel.text = "Status: Running (Port: ${apiServer.getServerPort()})"
-                    serverUrlLabel.text = "URL: ${apiServer.getServerUrl()}"
-                    startServerButton.isEnabled = false
-                    stopServerButton.isEnabled = true
-                    updateApiList(apiServer.getServerUrl())
-                } else {
-                    serverStatusLabel.text = "Status: Stopped"
-                    serverUrlLabel.text = "URL: Not running"
-                    startServerButton.isEnabled = true
-                    stopServerButton.isEnabled = false
-                    updateApiList(null)
-                }
-            }
-
-            // Server button listeners
-            startServerButton.addActionListener {
-                apiServer.startServer()
-                Timer(1000) {
-                    SwingUtilities.invokeLater {
-                        updateUiForServerState()
-                    }
-                }.apply { isRepeats = false }.start()
-            }
-            stopServerButton.addActionListener {
-                apiServer.stopServer()
-                updateUiForServerState()
-            }
-
-            // Create debug session control panel
-            val debugPanel = JPanel(GridLayout(2, 2, 5, 5)).apply {
-                border = BorderFactory.createTitledBorder("Debug Session Control")
-
-                val sessionDropdown = JComboBox<String>()
-
-                val refreshButton = JButton("Refresh Debug Sessions").apply {
-                    addActionListener {
-                        val sessionNames = debuggerService.refreshAndGetActiveSessionNames()
-                        sessionDropdown.model = DefaultComboBoxModel(sessionNames.toTypedArray())
-                        if (sessionNames.isNotEmpty()) {
-                            appendLog("[Auto DBG] Found active sessions. Please select one and connect.")
-                        } else {
-                            appendLog("[Auto DBG] No active debug sessions found.")
-                        }
-                    }
-                }
-
-                val connectButton = JButton("Connect").apply {
-                    addActionListener {
-                        val selectedSessionName = sessionDropdown.selectedItem as? String
-                        if (selectedSessionName != null) {
-                            debuggerService.connectToSession(selectedSessionName)
-                        } else {
-                            appendLog("[Auto DBG] Error: No session selected.")
-                        }
-                    }
-                }
-
-                val pauseButton = JButton("Pause").apply {
-                    addActionListener {
-                        // The service already knows which session is connected.
-                        debuggerService.pauseCurrentSession()
-                    }
-                }
-
-                add(refreshButton)
+            val sessionControlsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
+                background = SECTION_BG
                 add(sessionDropdown)
+                add(Box.createHorizontalStrut(12))
+
+                val refreshButton = createStyledButton("⟳ Refresh", BLUE_COLOR, "Refresh debug sessions")
+                refreshButton.addActionListener {
+                    val sessionNames = debuggerService.refreshAndGetActiveSessionNames()
+                    sessionDropdown.model = DefaultComboBoxModel(sessionNames.toTypedArray())
+                    if (sessionNames.isNotEmpty()) {
+                        appendLog("[Auto DBG] Found active sessions. Please select one and connect.")
+                    } else {
+                        appendLog("[Auto DBG] No active debug sessions found.")
+                    }
+                }
+                add(refreshButton)
+            }
+
+            val sessionButtonsPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
+                background = SECTION_BG
+                val connectButton = createStyledButton("🔌 Connect", GREEN_COLOR, "Connect to selected session")
+                val pauseButton = createStyledButton("⏸ Pause", Color(0xFF9800), "Pause current session")
+
+                connectButton.addActionListener {
+                    val selectedSessionName = sessionDropdown.selectedItem as? String
+                    if (selectedSessionName != null) {
+                        debuggerService.connectToSession(selectedSessionName)
+                    } else {
+                        appendLog("[Auto DBG] Error: No session selected.")
+                    }
+                }
+
+                pauseButton.addActionListener {
+                    debuggerService.pauseCurrentSession()
+                }
+
                 add(connectButton)
+                add(Box.createHorizontalStrut(8))
                 add(pauseButton)
             }
 
-            // Layout the panels
-            val controlsPanel = JPanel(BorderLayout()).apply {
-                add(serverSectionPanel, BorderLayout.NORTH)
-                add(Box.createVerticalStrut(24), BorderLayout.CENTER) // gap between sections
-                add(apiPanel, BorderLayout.SOUTH)
-                add(debugPanel, BorderLayout.EAST)
+            val debugContentPanel = JPanel().apply {
+                layout = BoxLayout(this, BoxLayout.Y_AXIS)
+                background = SECTION_BG
+                add(sessionControlsPanel)
+                add(Box.createVerticalStrut(8))
+                add(sessionButtonsPanel)
             }
 
-            add(controlsPanel, BorderLayout.NORTH)
+            // 3. API Explorer Section - Change to dropdown with endpoints from swagger.yaml
+            val apiEndpoints = listOf(
+                "GET /api/debugger/frame/{depth}",
+                "GET /api/debugger/variables/{frameIndex}",
+                "GET /api/debugger/call-stack",
+                "POST /api/debugger/breakpoint",
+                "GET /api/debugger/evaluate"
+            )
 
-            // Create log panel
-            val logTextArea = JTextArea(15, 50).apply {
+            val apiDropdown = JComboBox(apiEndpoints.toTypedArray()).apply {
+                background = Color(0x4C4C4C)
+                foreground = TEXT_COLOR
+                font = Font("Courier New", Font.PLAIN, 12)
+                border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
+            }
+
+            val apiExplorerPanel = JPanel(BorderLayout(12, 0)).apply {
+                background = SECTION_BG
+                add(apiDropdown, BorderLayout.CENTER)
+
+                val copyApiButton = createStyledButton("📋 Copy", BLUE_COLOR, "Copy API endpoint")
+                copyApiButton.addActionListener {
+                    val selectedEndpoint = apiDropdown.selectedItem as? String
+                    if (selectedEndpoint != null) {
+                        val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
+                        val endpoint = selectedEndpoint.substringAfter(" ") // Remove HTTP method
+                        val fullUrl = "$baseUrl$endpoint"
+
+                        val clipboard = Toolkit.getDefaultToolkit().systemClipboard
+                        val selection = StringSelection(fullUrl)
+                        clipboard.setContents(selection, selection)
+                        appendLog("[Auto DBG] API endpoint copied to clipboard: $fullUrl")
+                    }
+                }
+                add(copyApiButton, BorderLayout.EAST)
+            }
+
+            // 4. Logs Section
+            val logTextArea = JTextArea().apply {
                 isEditable = false
                 lineWrap = true
                 wrapStyleWord = true
-                append("[Auto DBG] Tool window loaded!\n")
+                background = Color(0x1E1E1E)
+                foreground = TEXT_COLOR
+                font = Font("Courier New", Font.PLAIN, 11)
+                border = BorderFactory.createEmptyBorder(8, 8, 8, 8)
+                append("[Auto DBG] Available endpoints loaded.\n")
+                append("[Auto DBG] Found session: actual.random_company1.Main\n")
+                append("[Auto DBG] Connected to actual.random_company1.Main (JAVA).\n")
+                append("[Auto DBG] API endpoint copied to clipboard.\n")
             }
             logArea = logTextArea
             flushLogs()
 
             val logScrollPane = JScrollPane(logTextArea).apply {
-                border = BorderFactory.createTitledBorder("Logs")
+                preferredSize = Dimension(0, 200)
+                maximumSize = Dimension(Int.MAX_VALUE, 200)
+                border = BorderFactory.createEmptyBorder()
+                verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
             }
 
-            add(logScrollPane, BorderLayout.CENTER)
+            val logContentPanel = JPanel(BorderLayout()).apply {
+                background = SECTION_BG
+                add(logScrollPane, BorderLayout.CENTER)
+            }
+
+            // Add all sections to the main panel (remove static header text)
+            mainPanel.add(createSection("����️ REST API Server", serverContentPanel))
+            mainPanel.add(Box.createVerticalStrut(16))
+            mainPanel.add(createSection("🐞 Debug Session", debugContentPanel))
+            mainPanel.add(Box.createVerticalStrut(16))
+            mainPanel.add(createSection("🔍 API Explorer", apiExplorerPanel))
+            mainPanel.add(Box.createVerticalStrut(16))
+            mainPanel.add(createSection("📜 Logs", logContentPanel))
+
+            // Wrap the main panel in a scroll pane to make the entire page scrollable
+            val scrollPane = JScrollPane(mainPanel).apply {
+                verticalScrollBarPolicy = JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED
+                horizontalScrollBarPolicy = JScrollPane.HORIZONTAL_SCROLLBAR_NEVER
+                border = BorderFactory.createEmptyBorder()
+                background = DARK_BG
+                viewport.background = DARK_BG
+            }
+
+            add(scrollPane, BorderLayout.CENTER)
+
+            // Initialize UI state
+            updateServerUI(apiServer, portLabel, urlPanel,
+                         serverButtonsPanel.components[0] as JComponent,
+                         serverButtonsPanel.components[2] as JComponent, ::updateServerStatusLabel)
+        }
+
+        private fun updateServerUI(apiServer: DebuggerApiServer, portLabel: JLabel,
+                                 urlPanel: JPanel, startButton: JComponent, stopButton: JComponent,
+                                 updateStatusLabel: (Boolean) -> Unit) {
+            if (apiServer.isRunning()) {
+                // Update status using the callback function
+                updateStatusLabel(true)
+
+                portLabel.text = "Port: ${apiServer.getServerPort()}"
+
+                // Update URL in the URL panel
+                val urlLabel = urlPanel.components[0] as JLabel
+                urlLabel.text = "URL: ${apiServer.getServerUrl()}"
+
+                startButton.isEnabled = false
+                stopButton.isEnabled = true
+            } else {
+                // Update status using the callback function
+                updateStatusLabel(false)
+
+                portLabel.text = "Port: Not running"
+
+                val urlLabel = urlPanel.components[0] as JLabel
+                urlLabel.text = "URL: Not running"
+
+                startButton.isEnabled = true
+                stopButton.isEnabled = false
+            }
         }
     }
 }
