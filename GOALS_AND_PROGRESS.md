@@ -27,6 +27,7 @@
 ## Phase 4: Polish and Release 📋
 - [ ] Polish UI/UX and error handling.
 - [ ] Prepare for publishing to JetBrains Marketplace.
+- [x] Implemented MCP server (external Python library; repo link to be added)
 
 ---
 
@@ -39,9 +40,10 @@
 - **REST API Server**: HTTP server with automatic endpoint discovery and JSON responses  
 - **Real-time Debug Integration**: Automatic detection and connection to active debug sessions
 - **Comprehensive Data Access**: Stack frames, call stacks, and variable inspection with nested object support
+- **MCP Server Integration**: External Python-based MCP server implemented for advanced agent communication (repo link to be added)
 
 ### Current API Capabilities:
-- `GET /tools` - Discover all available API endpoints
+~~- `GET /tools` - Discover all available API endpoints~~
 - `GET /api/debugger/frame/{depth}` - Retrieve stack frame at specific depth
 - `GET /api/debugger/callstack` - Get complete call stack with configurable depth
 - `GET /api/debugger/variables` - Extract variables with nested object inspection
@@ -51,6 +53,10 @@
 ---
 
 ## Progress Log
+
+### 2025-08-03
+- **Variable Extraction Logic Rewritten**: Refactored the variable extraction logic to fix bugs and properly handle the asynchronous nature of debugger items. This improves reliability and accuracy when retrieving variable values during debugging sessions.
+- **API Endpoints Updated in swagger.yaml**: Updated and expanded the API endpoints in `swagger.yaml` to support MCP generation for the external library.
 
 ### 2025-08-01
 - **Architectural Transformation Complete**: Successfully refactored from hardcoded debugging methods to composition pattern using language-specific implementations
