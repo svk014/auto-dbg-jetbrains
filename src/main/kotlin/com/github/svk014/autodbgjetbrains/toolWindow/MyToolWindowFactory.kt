@@ -417,7 +417,6 @@ class MyToolWindowFactory : ToolWindowFactory {
                 apiExplorerPanel.add(Box.createVerticalStrut(8))
                 apiExplorerPanel.add(paramPanel)
                 apiExplorerPanel.add(Box.createVerticalStrut(8))
-                apiExplorerPanel.add(runRequestButton)
 
                 add(statusPanel)
                 add(Box.createVerticalStrut(8))
@@ -425,8 +424,10 @@ class MyToolWindowFactory : ToolWindowFactory {
                 add(Box.createVerticalStrut(8))
                 add(urlPanel)
                 add(Box.createVerticalStrut(8))
-                add(apiExplorerPanel) // Added API explorer here
-                add(Box.createVerticalStrut(12))
+                add(apiExplorerPanel)
+                add(Box.createVerticalStrut(8))
+                serverButtonsPanel.add(Box.createHorizontalStrut(8))
+                serverButtonsPanel.add(runRequestButton)
                 add(serverButtonsPanel)
             }
 
