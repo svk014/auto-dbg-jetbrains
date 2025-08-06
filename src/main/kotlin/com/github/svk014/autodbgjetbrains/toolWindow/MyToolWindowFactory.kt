@@ -305,7 +305,11 @@ class MyToolWindowFactory : ToolWindowFactory {
                     "GET /api/debugger/variables/{frameIndex}",
                     "GET /api/debugger/call-stack",
                     "POST /api/debugger/breakpoint",
-                    "GET /api/debugger/evaluate"
+                    "GET /api/debugger/evaluate",
+                    // New step endpoints
+                    "POST /api/debugger/step/over",
+                    "POST /api/debugger/step/into",
+                    "POST /api/debugger/step/out"
                 )
 
                 val apiDropdown = JComboBox(apiEndpoints.toTypedArray()).apply {
