@@ -7,6 +7,9 @@ import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
 import com.github.svk014.autodbgjetbrains.debugger.models.Variable
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
+import com.intellij.openapi.application.ApplicationManager
+import com.intellij.openapi.application.ReadAction
+import com.intellij.openapi.application.WriteIntentReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -107,11 +110,15 @@ class DebuggerIntegrationService(private val project: Project) {
         return variableRetriever?.getFrameVariables(frameId, maxDepth) ?: emptyMap()
     }
 
+    private fun getCurrentSession(): XDebugSession? {
+        return selectedSessionName?.let { activeSessions[it] }
+    }
+
     /**
      * Pauses the currently connected debug session.
      */
     fun pauseCurrentSession() {
-        val session = selectedSessionName?.let { activeSessions[it] }
+        val session = getCurrentSession()
         if (session != null) {
             if (!session.isStopped && !session.isPaused) {
                 session.pause()
@@ -123,4 +130,45 @@ class DebuggerIntegrationService(private val project: Project) {
             appendLog("Error: No session is currently connected to pause.")
         }
     }
+
+    // --- Step control methods ---
+    fun stepOver(): Boolean {
+        val session = getCurrentSession()
+        if (session != null) {
+            ApplicationManager.getApplication().invokeLater {
+                session.stepOver(false)
+            }
+            return true
+        } else {
+            appendLog("Error: No session is currently connected for stepping over.")
+        }
+        return false
+    }
+
+    fun stepInto(): Boolean {
+        val session = getCurrentSession()
+        if (session != null) {
+            ApplicationManager.getApplication().invokeLater {
+                session.stepInto()
+            }
+            return true
+        } else {
+            appendLog("Error: No session is currently connected for stepping in.")
+        }
+        return false
+    }
+
+    fun stepOut(): Boolean {
+        val session = getCurrentSession()
+        if (session != null) {
+            ApplicationManager.getApplication().invokeLater {
+                session.stepOut()
+            }
+            return true
+        } else {
+            appendLog("Error: No session is currently connected for stepping out.")
+        }
+        return false
+    }
+
 }

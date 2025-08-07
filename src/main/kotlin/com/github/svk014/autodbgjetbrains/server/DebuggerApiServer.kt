@@ -61,6 +61,9 @@ class DebuggerApiServer(private val project: Project) {
                 appendLog("  - GET  http://localhost:$actualPort/api/debugger/variables")
                 appendLog("  - POST http://localhost:$actualPort/api/debugger/variable/set")
                 appendLog("  - POST http://localhost:$actualPort/api/debugger/breakpoint")
+                appendLog("  - POST http://localhost:$actualPort/api/debugger/step/over")
+                appendLog("  - POST http://localhost:$actualPort/api/debugger/step/into")
+                appendLog("  - POST http://localhost:$actualPort/api/debugger/step/out")
 
             } catch (e: Exception) {
                 thisLogger().error("[Auto DBG] Failed to start HTTP server", e)

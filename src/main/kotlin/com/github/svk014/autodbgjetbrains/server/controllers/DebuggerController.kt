@@ -96,6 +96,34 @@ class DebuggerController(private val project: Project) {
                         )
                     }
                 }
+
+                post("/step/over") {
+                    try {
+                        val result = debuggerService.stepOver()
+                        call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in step over", e)
+                        call.respond(HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step over: ${e.message}"))
+                    }
+                }
+                post("/step/into") {
+                    try {
+                        val result = debuggerService.stepInto()
+                        call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in step into", e)
+                        call.respond(HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step into: ${e.message}"))
+                    }
+                }
+                post("/step/out") {
+                    try {
+                        val result = debuggerService.stepOut()
+                        call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in step out", e)
+                        call.respond(HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step out: ${e.message}"))
+                    }
+                }
             }
         }
     }
