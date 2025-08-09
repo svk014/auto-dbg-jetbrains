@@ -5,7 +5,10 @@ import com.intellij.execution.RunManager
 import com.intellij.execution.application.ApplicationConfiguration
 import com.intellij.execution.application.ApplicationConfigurationType
 import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.process.ProcessEvent
+import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ExecutionEnvironmentBuilder
+import com.intellij.execution.ui.RunContentDescriptor
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.module.ModuleManager
 import com.intellij.openapi.project.Project
@@ -13,11 +16,13 @@ import com.intellij.openapi.project.ProjectManager
 import com.intellij.openapi.projectRoots.JavaSdk
 import com.intellij.openapi.projectRoots.ProjectJdkTable
 import com.intellij.openapi.roots.ModuleRootManager
+import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.HeavyPlatformTestCase
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
 class OpenCloseIdeTest : HeavyPlatformTestCase() {
     private var externalProject: Project? = null
@@ -33,7 +38,8 @@ class OpenCloseIdeTest : HeavyPlatformTestCase() {
         val projectPath = "/Users/souvikdas/Documents/personal/interview"
         externalProject = ProjectManager.getInstance().loadAndOpenProject(projectPath)
         assertNotNull(externalProject)
-        // Now run src/Main.java (default package) in external project
+
+        // Now run src/Main.java (default package) in the external project
         val externalProj = externalProject!!
         // Refresh project files
         val projectDir = File(projectPath)
@@ -64,10 +70,30 @@ class OpenCloseIdeTest : HeavyPlatformTestCase() {
         val env = ExecutionEnvironmentBuilder
             .create(DefaultRunExecutor.getRunExecutorInstance(), settings)
             .build()
+
+        val output = StringBuilder()
+        val descriptorRef = AtomicReference<RunContentDescriptor?>()
         val latch = CountDownLatch(1)
 
-        ProgramRunnerUtil.executeConfigurationAsync(env, false, false) { latch.countDown() }
+        ProgramRunnerUtil.executeConfigurationAsync(env, false, false)
+        { descriptor ->
+            descriptorRef.getAndSet(descriptor)
+            // attach listener immediately to capture all output
+            descriptor.processHandler!!.addProcessListener(object : ProcessListener {
+                override fun startNotified(event: ProcessEvent) {}
+                override fun processTerminated(event: ProcessEvent) {}
+                override fun onTextAvailable(event: ProcessEvent, outputType: Key<*>) {
+                    output.append(event.text)
+                }
+            })
+            latch.countDown()
+        }
         assertTrue("Main.java should run within timeout", latch.await(10, TimeUnit.SECONDS))
+
+        val descriptor = descriptorRef.get()!!
+        // wait for process to finish and then print captured output
+        descriptor.processHandler!!.waitFor()
+        println("Captured stdout:\n$output")
 
         println("Main.java executed successfully in external project")
     }
