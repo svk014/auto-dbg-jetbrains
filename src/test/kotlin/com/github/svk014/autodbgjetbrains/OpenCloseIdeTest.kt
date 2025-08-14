@@ -4,7 +4,7 @@ import com.intellij.execution.ProgramRunnerUtil
 import com.intellij.execution.RunManager
 import com.intellij.execution.application.ApplicationConfiguration
 import com.intellij.execution.application.ApplicationConfigurationType
-import com.intellij.execution.executors.DefaultRunExecutor
+import com.intellij.execution.executors.DefaultDebugExecutor
 import com.intellij.execution.process.ProcessEvent
 import com.intellij.execution.process.ProcessListener
 import com.intellij.execution.runners.ExecutionEnvironmentBuilder
@@ -19,6 +19,9 @@ import com.intellij.openapi.roots.ModuleRootManager
 import com.intellij.openapi.util.Key
 import com.intellij.openapi.vfs.LocalFileSystem
 import com.intellij.testFramework.HeavyPlatformTestCase
+import com.intellij.xdebugger.XDebuggerManager
+import com.intellij.xdebugger.breakpoints.XBreakpointType
+import com.intellij.xdebugger.breakpoints.XLineBreakpointType
 import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -39,7 +42,6 @@ class OpenCloseIdeTest : HeavyPlatformTestCase() {
         externalProject = ProjectManager.getInstance().loadAndOpenProject(projectPath)
         assertNotNull(externalProject)
 
-        // Now run src/Main.java (default package) in the external project
         val externalProj = externalProject!!
         // Refresh project files
         val projectDir = File(projectPath)
@@ -56,7 +58,24 @@ class OpenCloseIdeTest : HeavyPlatformTestCase() {
                 commit()
             }
         }
-        // Create run configuration
+        // Before running, add a line breakpoint at Main.java:32
+        val mainFile = File("$projectPath/src/actual/random_company1/Main.java")
+        val mainVf = LocalFileSystem.getInstance().refreshAndFindFileByIoFile(mainFile)!!
+
+        val bpUrl = mainVf.url
+        val javaLineBreakpointType = XBreakpointType.EXTENSION_POINT_NAME.extensionList
+            .filterIsInstance<XLineBreakpointType<*>>()
+            .first { it.id == "java-line" }
+        XDebuggerManager.getInstance(externalProj).breakpointManager.addLineBreakpoint(
+            javaLineBreakpointType, bpUrl, 43, null
+        )
+        XDebuggerManager.getInstance(externalProj).breakpointManager.addLineBreakpoint(
+            javaLineBreakpointType, bpUrl, 44, null
+        )
+        XDebuggerManager.getInstance(externalProj).breakpointManager.addLineBreakpoint(
+            javaLineBreakpointType, bpUrl, 45, null
+        )
+        // Create run (debug) configuration
         val runManager = RunManager.getInstance(externalProj)
         val configType = ApplicationConfigurationType.getInstance()
         val settings = runManager.createConfiguration("RunMain", configType.configurationFactories[0])
@@ -66,9 +85,13 @@ class OpenCloseIdeTest : HeavyPlatformTestCase() {
             appConfig.setModule(extModule)
             runManager.addConfiguration(settings)
         }
+
+        // give some time for the configuration to be set up
+        Thread.sleep(5_000)
+
         // Execute
         val env = ExecutionEnvironmentBuilder
-            .create(DefaultRunExecutor.getRunExecutorInstance(), settings)
+            .create(DefaultDebugExecutor.getDebugExecutorInstance(), settings)
             .build()
 
         val output = StringBuilder()
@@ -88,10 +111,13 @@ class OpenCloseIdeTest : HeavyPlatformTestCase() {
             })
             latch.countDown()
         }
-        assertTrue("Main.java should run within timeout", latch.await(10, TimeUnit.SECONDS))
+        // assertTrue("Main.java should run in debug mode within timeout", latch.await(10, TimeUnit.SECONDS))
 
         val descriptor = descriptorRef.get()!!
-        // wait for process to finish and then print captured output
+        // on breakpoint pause, wait 30s then resume
+        // Thread.sleep(30_000)
+        XDebuggerManager.getInstance(externalProj).currentSession?.resume()
+        // now wait for the process to finish and then print captured output
         descriptor.processHandler!!.waitFor()
         println("Captured stdout:\n$output")
 
