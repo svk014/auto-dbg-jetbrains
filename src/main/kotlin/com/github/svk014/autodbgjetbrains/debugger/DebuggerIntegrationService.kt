@@ -5,13 +5,13 @@ import com.github.svk014.autodbgjetbrains.debugger.interfaces.CallStackRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.FrameRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
-import com.github.svk014.autodbgjetbrains.debugger.models.Variable
+import com.github.svk014.autodbgjetbrains.debugger.models.SerializedVariable
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.XDebuggerManager
 
 @Service(Service.Level.PROJECT)
 class DebuggerIntegrationService(private val project: Project) {
@@ -103,7 +103,7 @@ class DebuggerIntegrationService(private val project: Project) {
         return callStackRetriever?.getCallStack(maxDepth) ?: emptyList()
     }
 
-    fun getFrameVariables(frameId: String, maxDepth: Int = 3): Map<String, Variable> {
+    fun getFrameVariables(frameId: String, maxDepth: Int = 3): Map<String, SerializedVariable> {
         return variableRetriever?.getFrameVariables(frameId, maxDepth) ?: emptyMap()
     }
 
