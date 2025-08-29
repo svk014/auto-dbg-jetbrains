@@ -3,6 +3,7 @@ package com.github.svk014.autodbgjetbrains.debugger.java
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.FrameRetriever
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
 import com.github.svk014.autodbgjetbrains.debugger.utils.AsyncDebuggerUtils
+import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.debugger.engine.JavaStackFrame
@@ -51,8 +52,7 @@ class JavaFrameRetriever(private val project: Project) : FrameRetriever {
 
         return FrameInfo(
             methodName = frame.descriptor.method?.name() ?: "Unknown Method",
-            // Convert from 0-based to 1-based line numbering for user display
-            lineNumber = sourcePosition.let { if (it != null) it.line + 1 else -1 },
+            lineNumber = SourceLine.zeroToOneBased(sourcePosition?.line),
             filePath = sourcePosition?.file?.path ?: "Unknown"
         )
     }

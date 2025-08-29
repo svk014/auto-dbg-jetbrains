@@ -1,5 +1,6 @@
 package com.github.svk014.autodbgjetbrains.debugger.models
 
+import com.github.svk014.autodbgjetbrains.models.SourceLine
 import kotlinx.serialization.Serializable
 
 /**
@@ -8,6 +9,6 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class FrameInfo(
     val methodName: String,
-    val lineNumber: Int,
+    val lineNumber: SourceLine?,
     val filePath: String
 )
