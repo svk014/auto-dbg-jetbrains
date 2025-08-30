@@ -99,7 +99,6 @@ class DebuggerController(private val project: Project) {
                 post("/breakpoint") {
                     try {
                         val body = call.receive<JsonObject>()
-                        appendLog(body.toString())
                         val file = body["file"]?.jsonPrimitive?.contentOrNull
                             ?: throw IllegalArgumentException("File parameter is required")
                         val line = body["line"]?.jsonPrimitive?.intOrNull
@@ -202,7 +201,6 @@ class DebuggerController(private val project: Project) {
     }
 
     fun setBreakpoint(file: String, line: Int): ApiResponse {
-        appendLog("Nraed $file $line")
         val success = debuggerService.setBreakpoint(file, SourceLine(line), null, null)
         return ApiResponse.success(success)
     }
