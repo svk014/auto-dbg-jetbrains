@@ -56,14 +56,7 @@ class DebuggerApiServer(private val project: Project) {
                 thisLogger().info("[Auto DBG] HTTP API Server started on http://localhost:$actualPort")
                 appendLog("[Auto DBG] HTTP API Server started on http://localhost:$actualPort")
                 appendLog("[Auto DBG] Available endpoints:")
-                appendLog("  - GET  http://localhost:$actualPort/api/debugger/frame/{depth}")
-                appendLog("  - GET  http://localhost:$actualPort/api/debugger/callstack")
-                appendLog("  - GET  http://localhost:$actualPort/api/debugger/variables")
-                appendLog("  - POST http://localhost:$actualPort/api/debugger/variable/set")
-                appendLog("  - POST http://localhost:$actualPort/api/debugger/breakpoint")
-                appendLog("  - POST http://localhost:$actualPort/api/debugger/step/over")
-                appendLog("  - POST http://localhost:$actualPort/api/debugger/step/into")
-                appendLog("  - POST http://localhost:$actualPort/api/debugger/step/out")
+                DebuggerController.routes.forEach { route -> appendLog("- ${route.method} http://localhost:$actualPort${route.path}") }
 
             } catch (e: Exception) {
                 thisLogger().error("[Auto DBG] Failed to start HTTP server", e)

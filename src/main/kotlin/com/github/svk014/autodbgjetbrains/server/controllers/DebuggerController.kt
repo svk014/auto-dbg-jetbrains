@@ -1,15 +1,24 @@
 package com.github.svk014.autodbgjetbrains.server.controllers
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
+import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.server.models.ApiResponse
-import com.github.svk014.autodbgjetbrains.server.models.BreakpointInfo
+import com.github.svk014.autodbgjetbrains.server.models.FieldType
+import com.github.svk014.autodbgjetbrains.server.models.ApiRoute
+import com.github.svk014.autodbgjetbrains.server.models.ApiField
+import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import io.ktor.http.*
 import io.ktor.server.application.*
+import io.ktor.server.request.receive
 import io.ktor.server.response.*
 import io.ktor.server.routing.*
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.contentOrNull
+import kotlinx.serialization.json.intOrNull
+import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * REST controller for debugger API endpoints
@@ -18,6 +27,30 @@ class DebuggerController(private val project: Project) {
 
     private val debuggerService: DebuggerIntegrationService by lazy {
         project.service<DebuggerIntegrationService>()
+    }
+
+    companion object {
+        val routes = listOf(
+            ApiRoute.of("GET", "/api/debugger/frame/{depth}"),
+            ApiRoute.of("GET", "/api/debugger/variables/{frameIndex}"),
+            ApiRoute.of("GET", "/api/debugger/call-stack"),
+            ApiRoute.of(
+                "POST", "/api/debugger/breakpoint", listOf(
+                    ApiField("file", FieldType.STRING, required = true),
+                    ApiField("line", FieldType.NUMBER, required = true)
+                )
+            ),
+            ApiRoute.of(
+                "POST", "/api/debugger/evaluate", listOf(
+                    ApiField("expression", FieldType.STRING, required = true),
+                    ApiField("frameIndex", FieldType.NUMBER, required = false, defaultValue = 0)
+                )
+            ),
+            ApiRoute.of("POST", "/api/debugger/step/over"),
+            ApiRoute.of("POST", "/api/debugger/step/into"),
+            ApiRoute.of("POST", "/api/debugger/step/out"),
+            ApiRoute.of("POST", "/api/debugger/continueExecution")
+        )
     }
 
     fun configureRoutes(routing: Routing) {
@@ -31,8 +64,7 @@ class DebuggerController(private val project: Project) {
                     } catch (e: Exception) {
                         thisLogger().error("Error getting frame", e)
                         call.respond(
-                            HttpStatusCode.InternalServerError,
-                            ApiResponse.error("Failed to get frame: ${e.message}")
+                            HttpStatusCode.InternalServerError, ApiResponse.error("Failed to get frame: ${e.message}")
                         )
                     }
                 }
@@ -66,33 +98,34 @@ class DebuggerController(private val project: Project) {
 
                 post("/breakpoint") {
                     try {
-                        val file = call.request.queryParameters["file"]
+                        val body = call.receive<JsonObject>()
+                        appendLog(body.toString())
+                        val file = body["file"]?.jsonPrimitive?.contentOrNull
                             ?: throw IllegalArgumentException("File parameter is required")
-                        val line = call.request.queryParameters["line"]?.toIntOrNull()
+                        val line = body["line"]?.jsonPrimitive?.intOrNull
                             ?: throw IllegalArgumentException("Line parameter is required")
                         val result = setBreakpoint(file, line)
                         call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
                         thisLogger().error("Error setting breakpoint", e)
                         call.respond(
-                            HttpStatusCode.BadRequest,
-                            ApiResponse.error("Failed to set breakpoint: ${e.message}")
+                            HttpStatusCode.BadRequest, ApiResponse.error("Failed to set breakpoint: ${e.message}")
                         )
                     }
                 }
 
-                get("/evaluate") {
+                post("/evaluate") {
                     try {
-                        val expression = call.request.queryParameters["expression"]
+                        val body = call.receive<JsonObject>()
+                        val expression = body["expression"]?.jsonPrimitive?.contentOrNull
                             ?: throw IllegalArgumentException("Expression parameter is required")
-                        val frameIndex = call.request.queryParameters["frameIndex"]?.toIntOrNull() ?: 0
+                        val frameIndex = body["frameIndex"]?.jsonPrimitive?.intOrNull ?: 0
                         val result = evaluateExpression(expression, frameIndex)
                         call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
                         thisLogger().error("Error evaluating expression", e)
                         call.respond(
-                            HttpStatusCode.BadRequest,
-                            ApiResponse.error("Failed to evaluate expression: ${e.message}")
+                            HttpStatusCode.BadRequest, ApiResponse.error("Failed to evaluate expression: ${e.message}")
                         )
                     }
                 }
@@ -103,7 +136,9 @@ class DebuggerController(private val project: Project) {
                         call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
                     } catch (e: Exception) {
                         thisLogger().error("Error in step over", e)
-                        call.respond(HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step over: ${e.message}"))
+                        call.respond(
+                            HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step over: ${e.message}")
+                        )
                     }
                 }
                 post("/step/into") {
@@ -112,7 +147,9 @@ class DebuggerController(private val project: Project) {
                         call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
                     } catch (e: Exception) {
                         thisLogger().error("Error in step into", e)
-                        call.respond(HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step into: ${e.message}"))
+                        call.respond(
+                            HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step into: ${e.message}")
+                        )
                     }
                 }
                 post("/step/out") {
@@ -121,7 +158,21 @@ class DebuggerController(private val project: Project) {
                         call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
                     } catch (e: Exception) {
                         thisLogger().error("Error in step out", e)
-                        call.respond(HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step out: ${e.message}"))
+                        call.respond(
+                            HttpStatusCode.InternalServerError, ApiResponse.error("Failed to step out: ${e.message}")
+                        )
+                    }
+                }
+                post("/continueExecution") {
+                    try {
+                        val result = debuggerService.continueExecution()
+                        call.respond(HttpStatusCode.OK, ApiResponse.success(mapOf("stepped" to result)))
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in continueExecution", e)
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            ApiResponse.error("Failed to continueExecution: ${e.message}")
+                        )
                     }
                 }
             }
@@ -151,17 +202,16 @@ class DebuggerController(private val project: Project) {
     }
 
     fun setBreakpoint(file: String, line: Int): ApiResponse {
-        // Placeholder implementation - breakpoint functionality not yet implemented
-        val breakpointInfo = BreakpointInfo(true, file, line, null, "")
-        return ApiResponse.success(breakpointInfo)
+        appendLog("Nraed $file $line")
+        val success = debuggerService.setBreakpoint(file, SourceLine(line), null, null)
+        return ApiResponse.success(success)
     }
 
     fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
         // Placeholder implementation - expression evaluation not yet implemented
         return ApiResponse.success(
             mapOf(
-                "result" to "Expression evaluation not yet implemented",
-                "expression" to expression
+                "result" to "Expression evaluation not yet implemented", "expression" to expression
             )
         )
     }

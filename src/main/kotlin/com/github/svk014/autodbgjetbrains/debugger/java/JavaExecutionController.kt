@@ -30,6 +30,10 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
         XDebuggerManager.getInstance(project).currentSession?.stepInto()
     }
 
+    override fun stepOut() {
+        XDebuggerManager.getInstance(project).currentSession?.stepOut()
+    }
+
     override fun continueExecution() {
         XDebuggerManager.getInstance(project).currentSession?.resume()
     }

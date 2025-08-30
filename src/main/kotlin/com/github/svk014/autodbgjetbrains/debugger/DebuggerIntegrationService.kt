@@ -1,12 +1,16 @@
 package com.github.svk014.autodbgjetbrains.debugger
 
 import com.github.svk014.autodbgjetbrains.debugger.factory.DebuggerComponentFactory
+import com.github.svk014.autodbgjetbrains.debugger.interfaces.BreakpointType
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.CallStackRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.FrameRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
+import com.github.svk014.autodbgjetbrains.debugger.java.JavaExecutionController
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
 import com.github.svk014.autodbgjetbrains.debugger.models.SerializedVariable
+import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
+import com.intellij.execution.multilaunch.execution.conditions.Condition
 import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.application.ReadAction
 import com.intellij.openapi.application.WriteIntentReadAction
@@ -27,6 +31,9 @@ class DebuggerIntegrationService(private val project: Project) {
     private var callStackRetriever: CallStackRetriever? = null
     private var variableRetriever: VariableRetriever? = null
     private var selectedSessionName: String? = null
+
+
+    private var executionController: JavaExecutionController = JavaExecutionController(project)
 
     /**
      * Manually queries the IDE for all active debug sessions, updates the internal map,
@@ -133,42 +140,38 @@ class DebuggerIntegrationService(private val project: Project) {
 
     // --- Step control methods ---
     fun stepOver(): Boolean {
-        val session = getCurrentSession()
-        if (session != null) {
-            ApplicationManager.getApplication().invokeLater {
-                session.stepOver(false)
-            }
-            return true
-        } else {
-            appendLog("Error: No session is currently connected for stepping over.")
+        ApplicationManager.getApplication().invokeLater {
+            executionController.stepOver()
         }
-        return false
+        return true
     }
 
     fun stepInto(): Boolean {
-        val session = getCurrentSession()
-        if (session != null) {
-            ApplicationManager.getApplication().invokeLater {
-                session.stepInto()
-            }
-            return true
-        } else {
-            appendLog("Error: No session is currently connected for stepping in.")
+        ApplicationManager.getApplication().invokeLater {
+            executionController.stepInto()
         }
-        return false
+        return true
     }
 
     fun stepOut(): Boolean {
-        val session = getCurrentSession()
-        if (session != null) {
-            ApplicationManager.getApplication().invokeLater {
-                session.stepOut()
-            }
-            return true
-        } else {
-            appendLog("Error: No session is currently connected for stepping out.")
+        ApplicationManager.getApplication().invokeLater {
+            executionController.stepOut()
         }
-        return false
+        return true
+    }
+
+    fun setBreakpoint(file: String, line: SourceLine, condition: String?, type: BreakpointType?): Boolean {
+        ApplicationManager.getApplication().invokeLater {
+            executionController.setBreakpoint(file, line, condition, type)
+        }
+        return true
+    }
+
+    fun continueExecution(): Boolean {
+        ApplicationManager.getApplication().invokeLater {
+            executionController.continueExecution()
+        }
+        return true
     }
 
 }
