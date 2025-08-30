@@ -305,7 +305,11 @@ class MyToolWindowFactory : ToolWindowFactory {
                     "GET /api/debugger/variables/{frameIndex}",
                     "GET /api/debugger/call-stack",
                     "POST /api/debugger/breakpoint",
-                    "GET /api/debugger/evaluate"
+                    "GET /api/debugger/evaluate",
+                    // New step endpoints
+                    "POST /api/debugger/step/over",
+                    "POST /api/debugger/step/into",
+                    "POST /api/debugger/step/out"
                 )
 
                 val apiDropdown = JComboBox(apiEndpoints.toTypedArray()).apply {
@@ -315,18 +319,92 @@ class MyToolWindowFactory : ToolWindowFactory {
                     border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
                 }
 
-                val apiExplorerPanel = JPanel(BorderLayout(8, 0)).apply {
+                // Panel for dynamic param fields
+                val paramPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
+                    background = SECTION_BG
+                }
+
+                // Helper to extract params from endpoint string
+                fun extractParams(endpoint: String): List<String> {
+                    val regex = "\\{(\\w+)\\}".toRegex()
+                    return regex.findAll(endpoint).map { it.groupValues[1] }.toList()
+                }
+
+                // Update paramPanel fields based on selected endpoint
+                fun updateParamFields(endpoint: String) {
+                    paramPanel.removeAll()
+                    val params = extractParams(endpoint)
+                    for (param in params) {
+                        paramPanel.add(JLabel("$param: ").apply { foreground = TEXT_COLOR })
+                        paramPanel.add(JTextField(8).apply {
+                            name = param
+                            background = Color(0x4C4C4C)
+                            foreground = TEXT_COLOR
+                        })
+                    }
+                    paramPanel.revalidate()
+                    paramPanel.repaint()
+                }
+
+                apiDropdown.addActionListener {
+                    val selected = apiDropdown.selectedItem as? String ?: return@addActionListener
+                    updateParamFields(selected)
+                }
+                // Initialize param fields for first endpoint
+                updateParamFields(apiEndpoints[0])
+
+                val runRequestButton = createStyledButton("▶ Run Request", GREEN_COLOR, "Run selected API request")
+                runRequestButton.addActionListener {
+                    val selected = apiDropdown.selectedItem as? String ?: return@addActionListener
+                    val params = extractParams(selected)
+                    var endpoint = selected.substringAfter(" ")
+                    // Replace params in endpoint with user input
+                    for (param in params) {
+                        val field = paramPanel.components.find { it is JTextField && it.name == param } as? JTextField
+                        val value = field?.text ?: ""
+                        endpoint = endpoint.replace("{$param}", value)
+                    }
+                    val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
+                    val fullUrl = "$baseUrl$endpoint"
+                    val method = selected.substringBefore(" ").uppercase()
+                    Thread {
+                        try {
+                            val url = java.net.URL(fullUrl)
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.requestMethod = method
+                            conn.connectTimeout = 3000
+                            conn.readTimeout = 5000
+                            if (method == "POST") {
+                                conn.doOutput = true
+                                conn.setRequestProperty("Content-Type", "application/json")
+                                // For demo, send empty body. You can add a body input if needed.
+                                conn.outputStream.use { it.write("{}".toByteArray()) }
+                            }
+                            val response = conn.inputStream.bufferedReader().readText()
+                            SwingUtilities.invokeLater {
+                                appendLog("[Auto DBG] [$method] $fullUrl\n$response")
+                            }
+                        } catch (ex: Exception) {
+                            SwingUtilities.invokeLater {
+                                appendLog("[Auto DBG] Request failed: ${ex.message}")
+                            }
+                        }
+                    }.start()
+                }
+
+                val apiExplorerPanel = JPanel()
+                apiExplorerPanel.layout = BoxLayout(apiExplorerPanel, BoxLayout.Y_AXIS)
+                apiExplorerPanel.background = SECTION_BG
+                val apiDropdownPanel = JPanel(BorderLayout(8, 0)).apply {
                     background = SECTION_BG
                     add(apiDropdown, BorderLayout.CENTER)
-
                     val copyApiButton = createStyledButton("\uD83D\uDCC4 Copy", BLUE_COLOR, "Copy API endpoint")
                     copyApiButton.addActionListener {
                         val selectedEndpoint = apiDropdown.selectedItem as? String
                         if (selectedEndpoint != null) {
                             val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
-                            val endpoint = selectedEndpoint.substringAfter(" ") // Remove HTTP method
+                            val endpoint = selectedEndpoint.substringAfter(" ")
                             val fullUrl = "$baseUrl$endpoint"
-
                             val clipboard = Toolkit.getDefaultToolkit().systemClipboard
                             val selection = StringSelection(fullUrl)
                             clipboard.setContents(selection, selection)
@@ -335,6 +413,10 @@ class MyToolWindowFactory : ToolWindowFactory {
                     }
                     add(copyApiButton, BorderLayout.EAST)
                 }
+                apiExplorerPanel.add(apiDropdownPanel)
+                apiExplorerPanel.add(Box.createVerticalStrut(8))
+                apiExplorerPanel.add(paramPanel)
+                apiExplorerPanel.add(Box.createVerticalStrut(8))
 
                 add(statusPanel)
                 add(Box.createVerticalStrut(8))
@@ -342,8 +424,10 @@ class MyToolWindowFactory : ToolWindowFactory {
                 add(Box.createVerticalStrut(8))
                 add(urlPanel)
                 add(Box.createVerticalStrut(8))
-                add(apiExplorerPanel) // Added API explorer here
-                add(Box.createVerticalStrut(12))
+                add(apiExplorerPanel)
+                add(Box.createVerticalStrut(8))
+                serverButtonsPanel.add(Box.createHorizontalStrut(8))
+                serverButtonsPanel.add(runRequestButton)
                 add(serverButtonsPanel)
             }
 
