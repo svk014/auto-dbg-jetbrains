@@ -3,8 +3,8 @@ package com.github.svk014.autodbgjetbrains.toolWindow
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
 import com.github.svk014.autodbgjetbrains.server.controllers.DebuggerController
-import com.github.svk014.autodbgjetbrains.server.models.ApiRoute
-import com.github.svk014.autodbgjetbrains.server.models.FieldType
+import com.github.svk014.autodbgjetbrains.models.ApiRoute
+import com.github.svk014.autodbgjetbrains.models.FieldType
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow

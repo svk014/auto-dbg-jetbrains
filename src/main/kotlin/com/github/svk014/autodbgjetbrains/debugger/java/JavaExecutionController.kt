@@ -78,6 +78,34 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
 
     }
 
+
+    override fun removeBreakpoint(
+        file: String,
+        line: SourceLine,
+        condition: String?,
+        type: BreakpointType?,
+        lambdaOrdinal: Int?
+    ): Boolean {
+        val breakpointManager = XDebuggerManager.getInstance(project).breakpointManager
+        val virtualFile = LocalFileSystem.getInstance().findFileByPath(file)
+
+        val breakpointToRemove = breakpointManager.allBreakpoints.find { bp ->
+            val props = bp.properties
+            if (props is JavaLineBreakpointProperties && props.lambdaOrdinal != lambdaOrdinal) return@find false
+            return@find bp.sourcePosition?.file == virtualFile &&
+                    bp.sourcePosition?.line == line.zeroBasedNumber &&
+                    bp.conditionExpression?.expression == condition
+        }
+        if (breakpointToRemove != null) {
+            ApplicationManager.getApplication().runWriteAction {
+                breakpointManager.removeBreakpoint(breakpointToRemove)
+            }
+            return true
+        }
+
+        return false
+    }
+
     private fun breakpointType(
         type: BreakpointType?, availableBreakpointTypes: List<XLineBreakpointType<*>>
     ): XLineBreakpointType<out XBreakpointProperties<in Any>>? = when (type) {

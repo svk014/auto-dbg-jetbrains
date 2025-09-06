@@ -191,6 +191,25 @@ class DebuggerIntegrationService(private val project: Project) {
         }
     }
 
+    suspend fun removeBreakpoint(
+        file: String, line: SourceLine, condition: String?, type: BreakpointType?, lambdaOrdinal: Int?,
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                val result = executionController.removeBreakpoint(
+                    file = file,
+                    line = line,
+                    condition = condition,
+                    type = type,
+                    lambdaOrdinal = lambdaOrdinal,
+                )
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
     suspend fun continueExecution(): Boolean = suspendCancellableCoroutine { continuation ->
         ApplicationManager.getApplication().invokeLater {
             try {

@@ -21,6 +21,7 @@ interface BreakpointType
 interface ExecutionController {
     fun stepOver()
     fun stepInto()
+    fun stepOut()
     fun continueExecution()
     fun setBreakpoint(
         file: String,
@@ -30,5 +31,11 @@ interface ExecutionController {
         lambdaOrdinal: Int?
     ): Boolean
 
-    fun stepOut()
+    fun removeBreakpoint(
+        file: String,
+        line: SourceLine,
+        condition: String?,
+        type: BreakpointType?,
+        lambdaOrdinal: Int?
+    ): Boolean
 }

@@ -1,4 +1,4 @@
-package com.github.svk014.autodbgjetbrains.server.models
+package com.github.svk014.autodbgjetbrains.models
 
 import kotlinx.serialization.Serializable
 
