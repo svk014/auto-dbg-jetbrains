@@ -1,12 +1,13 @@
 package com.github.svk014.autodbgjetbrains.server.controllers
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
+import com.github.svk014.autodbgjetbrains.debugger.interfaces.BreakpointType
+import com.github.svk014.autodbgjetbrains.debugger.java.JavaBreakpointType
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.server.models.ApiResponse
 import com.github.svk014.autodbgjetbrains.server.models.FieldType
 import com.github.svk014.autodbgjetbrains.server.models.ApiRoute
 import com.github.svk014.autodbgjetbrains.server.models.ApiField
-import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -37,7 +38,9 @@ class DebuggerController(private val project: Project) {
             ApiRoute.of(
                 "POST", "/api/debugger/breakpoint", listOf(
                     ApiField("file", FieldType.STRING, required = true),
-                    ApiField("line", FieldType.NUMBER, required = true)
+                    ApiField("line", FieldType.NUMBER, required = true),
+                    ApiField("breakpointType", FieldType.STRING, required = true, defaultValue = "LINE"),
+                    ApiField("lambdaOrdinal", FieldType.NUMBER),
                 )
             ),
             ApiRoute.of(
@@ -103,7 +106,11 @@ class DebuggerController(private val project: Project) {
                             ?: throw IllegalArgumentException("File parameter is required")
                         val line = body["line"]?.jsonPrimitive?.intOrNull
                             ?: throw IllegalArgumentException("Line parameter is required")
-                        val result = setBreakpoint(file, line)
+                        val lambdaOrdinal = body["lambdaOrdinal"]?.jsonPrimitive?.intOrNull
+                        val breakPointType = body["breakpointType"]?.jsonPrimitive?.contentOrNull
+                            ?: throw IllegalArgumentException("Breakpoint Type is required")
+                        val breakPointTypeDeserialized = JavaBreakpointType.valueOf(breakPointType)
+                        val result = setBreakpoint(file, line, breakPointTypeDeserialized, lambdaOrdinal)
                         call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
                         thisLogger().error("Error setting breakpoint", e)
@@ -200,8 +207,10 @@ class DebuggerController(private val project: Project) {
         return ApiResponse.success(callStack)
     }
 
-    fun setBreakpoint(file: String, line: Int): ApiResponse {
-        val success = debuggerService.setBreakpoint(file, SourceLine(line), null, null)
+    suspend fun setBreakpoint(
+        file: String, line: Int, breakPointType: BreakpointType, lambaOrdinal: Int?
+    ): ApiResponse {
+        val success = debuggerService.setBreakpoint(file, SourceLine(line), null, breakPointType, lambaOrdinal)
         return ApiResponse.success(success)
     }
 

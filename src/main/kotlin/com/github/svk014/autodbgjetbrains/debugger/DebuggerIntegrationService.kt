@@ -10,15 +10,15 @@ import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
 import com.github.svk014.autodbgjetbrains.debugger.models.SerializedVariable
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
-import com.intellij.execution.multilaunch.execution.conditions.Condition
 import com.intellij.openapi.application.ApplicationManager
-import com.intellij.openapi.application.ReadAction
-import com.intellij.openapi.application.WriteIntentReadAction
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebugSession
 import com.intellij.xdebugger.XDebuggerManager
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @Service(Service.Level.PROJECT)
 class DebuggerIntegrationService(private val project: Project) {
@@ -139,39 +139,67 @@ class DebuggerIntegrationService(private val project: Project) {
     }
 
     // --- Step control methods ---
-    fun stepOver(): Boolean {
+    suspend fun stepOver(): Boolean = suspendCancellableCoroutine { continuation ->
         ApplicationManager.getApplication().invokeLater {
-            executionController.stepOver()
+            try {
+                executionController.stepOver()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
         }
-        return true
     }
 
-    fun stepInto(): Boolean {
+    suspend fun stepInto(): Boolean = suspendCancellableCoroutine { continuation ->
         ApplicationManager.getApplication().invokeLater {
-            executionController.stepInto()
+            try {
+                executionController.stepInto()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
         }
-        return true
     }
 
-    fun stepOut(): Boolean {
+    suspend fun stepOut(): Boolean = suspendCancellableCoroutine { continuation ->
         ApplicationManager.getApplication().invokeLater {
-            executionController.stepOut()
+            try {
+                executionController.stepOut()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
         }
-        return true
     }
 
-    fun setBreakpoint(file: String, line: SourceLine, condition: String?, type: BreakpointType?): Boolean {
+    suspend fun setBreakpoint(
+        file: String, line: SourceLine, condition: String?, type: BreakpointType?, lambdaOrdinal: Int?,
+    ): Boolean = suspendCancellableCoroutine { continuation ->
         ApplicationManager.getApplication().invokeLater {
-            executionController.setBreakpoint(file, line, condition, type)
+            try {
+                val result = executionController.setBreakpoint(
+                    file = file,
+                    line = line,
+                    condition = condition,
+                    type = type,
+                    lambdaOrdinal = lambdaOrdinal,
+                )
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
         }
-        return true
     }
 
-    fun continueExecution(): Boolean {
+    suspend fun continueExecution(): Boolean = suspendCancellableCoroutine { continuation ->
         ApplicationManager.getApplication().invokeLater {
-            executionController.continueExecution()
+            try {
+                executionController.continueExecution()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
         }
-        return true
     }
 
 }

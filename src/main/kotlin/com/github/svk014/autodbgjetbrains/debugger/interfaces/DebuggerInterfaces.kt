@@ -22,6 +22,13 @@ interface ExecutionController {
     fun stepOver()
     fun stepInto()
     fun continueExecution()
-    fun setBreakpoint(file: String, line: SourceLine, condition: String? = null, type: BreakpointType? = null)
+    fun setBreakpoint(
+        file: String,
+        line: SourceLine,
+        condition: String? = null,
+        type: BreakpointType? = null,
+        lambdaOrdinal: Int?
+    ): Boolean
+
     fun stepOut()
 }

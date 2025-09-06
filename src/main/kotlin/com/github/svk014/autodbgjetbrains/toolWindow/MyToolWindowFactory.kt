@@ -60,9 +60,7 @@ class MyToolWindowFactory : ToolWindowFactory {
 
             // Custom button class that extends JComponent
             private class StyledButton(
-                private val text: String,
-                private val bgColor: Color,
-                tooltipText: String? = null
+                private val text: String, private val bgColor: Color, tooltipText: String? = null
             ) : JComponent() {
                 private var isHovered = false
                 private var isPressed = false
@@ -102,9 +100,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                                 isPressed = false
                                 repaint()
                                 val event = java.awt.event.ActionEvent(
-                                    this@StyledButton,
-                                    java.awt.event.ActionEvent.ACTION_PERFORMED,
-                                    text
+                                    this@StyledButton, java.awt.event.ActionEvent.ACTION_PERFORMED, text
                                 )
                                 actionListeners.forEach { it.actionPerformed(event) }
                             }
@@ -277,12 +273,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     Timer(1000) {
                         SwingUtilities.invokeLater {
                             updateServerUI(
-                                apiServer,
-                                portLabel,
-                                urlPanel,
-                                startButton,
-                                stopButton,
-                                ::updateServerStatusLabel
+                                apiServer, portLabel, urlPanel, startButton, stopButton, ::updateServerStatusLabel
                             )
                         }
                     }.apply { isRepeats = false }.start()
@@ -406,16 +397,16 @@ class MyToolWindowFactory : ToolWindowFactory {
                                 val bodyJson = buildString {
                                     append("{")
                                     selected.bodyFields.forEachIndexed { i, field ->
-                                        val fieldInput = bodyPanel.components
-                                            .filterIsInstance<JTextField>()
+                                        val fieldInput = bodyPanel.components.filterIsInstance<JTextField>()
                                             .find { it.name == field.name }
-                                        val value = fieldInput?.text ?: field.defaultValue ?: ""
+                                        val value = fieldInput?.text ?: field.defaultValue
 
-                                        val jsonValue = when (field.type) {
-                                            FieldType.STRING -> "\"$value\""
-                                            FieldType.NUMBER -> value
-                                            FieldType.BOOLEAN -> (value as String?)?.lowercase()
-                                            else -> ""
+                                        val jsonValue = when {
+                                            value == null || (value is String && value.isEmpty()) -> null
+                                            field.type == FieldType.STRING -> "\"$value\""
+                                            field.type == FieldType.NUMBER -> value
+                                            field.type == FieldType.BOOLEAN -> (value as String?)?.lowercase()
+                                            else -> null
                                         }
 
                                         append("\"${field.name}\": $jsonValue")
@@ -614,8 +605,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                         val scrollAmount = e.scrollAmount * e.wheelRotation * 16
                         val currentValue = verticalScrollBar.value
                         val newValue = (currentValue + scrollAmount).coerceIn(
-                            verticalScrollBar.minimum,
-                            verticalScrollBar.maximum - verticalScrollBar.visibleAmount
+                            verticalScrollBar.minimum, verticalScrollBar.maximum - verticalScrollBar.visibleAmount
                         )
                         verticalScrollBar.value = newValue
                         e.consume()
@@ -627,15 +617,21 @@ class MyToolWindowFactory : ToolWindowFactory {
 
             // Initialize UI state
             updateServerUI(
-                apiServer, portLabel, urlPanel,
+                apiServer,
+                portLabel,
+                urlPanel,
                 serverButtonsPanel.components[0] as JComponent,
-                serverButtonsPanel.components[2] as JComponent, ::updateServerStatusLabel
+                serverButtonsPanel.components[2] as JComponent,
+                ::updateServerStatusLabel
             )
         }
 
         private fun updateServerUI(
-            apiServer: DebuggerApiServer, portLabel: JLabel,
-            urlPanel: JPanel, startButton: JComponent, stopButton: JComponent,
+            apiServer: DebuggerApiServer,
+            portLabel: JLabel,
+            urlPanel: JPanel,
+            startButton: JComponent,
+            stopButton: JComponent,
             updateStatusLabel: (Boolean) -> Unit
         ) {
             if (apiServer.isRunning()) {

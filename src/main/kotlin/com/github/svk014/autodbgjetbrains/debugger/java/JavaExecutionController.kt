@@ -13,11 +13,10 @@ import com.intellij.xdebugger.XDebuggerUtil
 import com.intellij.xdebugger.breakpoints.XBreakpointProperties
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
 import com.intellij.xdebugger.impl.breakpoints.XBreakpointUtil
+import org.jetbrains.java.debugger.breakpoints.properties.JavaLineBreakpointProperties
 
 enum class JavaBreakpointType : BreakpointType {
-    LINE,
-    METHOD,
-    LAMBDA
+    LINE, METHOD
 }
 
 class JavaExecutionController(private val project: Project) : ExecutionController {
@@ -38,50 +37,52 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
         XDebuggerManager.getInstance(project).currentSession?.resume()
     }
 
-    override fun setBreakpoint(file: String, line: SourceLine, condition: String?, type: BreakpointType?) {
+    override fun setBreakpoint(
+        file: String, line: SourceLine, condition: String?, type: BreakpointType?, lambdaOrdinal: Int?,
+    ): Boolean {
         val breakpointManager = XDebuggerManager.getInstance(project).breakpointManager
-        val virtualFile = LocalFileSystem.getInstance().findFileByPath(file) ?: return
+        val virtualFile =
+            LocalFileSystem.getInstance().findFileByPath(file) ?: throw Exception("Can't find virtual file")
 
         var selectedBreakpointType: XLineBreakpointType<*>? = null
         ApplicationManager.getApplication().runReadAction {
             val sourcePosition = XDebuggerUtil.getInstance().createPosition(virtualFile, line.zeroBasedNumber)
             if (sourcePosition != null) {
                 val availableBreakpointTypes = XBreakpointUtil.getAvailableLineBreakpointTypes(
-                    project,
-                    sourcePosition,
-                    null
+                    project, sourcePosition, null
                 )
 
                 selectedBreakpointType = breakpointType(type, availableBreakpointTypes)
             }
         }
+        val finalBreakpointType =
+            (selectedBreakpointType as XLineBreakpointType<in Any>?) ?: throw Exception("Unable to set breakpoint")
 
-        val finalBreakpointType = selectedBreakpointType ?: return
+
+        val properties = finalBreakpointType.createBreakpointProperties(virtualFile, line.zeroBasedNumber)
+
+        if (lambdaOrdinal != null && properties is JavaLineBreakpointProperties) {
+            properties.encodedInlinePosition = lambdaOrdinal
+        }
 
         ApplicationManager.getApplication().runWriteAction {
             val breakpoint = breakpointManager.addLineBreakpoint(
-                finalBreakpointType,
-                virtualFile.url,
-                line.zeroBasedNumber,
-                null
+                finalBreakpointType, virtualFile.url, line.zeroBasedNumber, properties
             )
+
             if (condition != null) {
                 breakpoint.setCondition(condition)
             }
         }
+        return true
+
     }
 
     private fun breakpointType(
-        type: BreakpointType?,
-        availableBreakpointTypes: List<XLineBreakpointType<*>>
+        type: BreakpointType?, availableBreakpointTypes: List<XLineBreakpointType<*>>
     ): XLineBreakpointType<out XBreakpointProperties<in Any>>? = when (type) {
         JavaBreakpointType.METHOD -> {
             availableBreakpointTypes.find { it is JavaMethodBreakpointType }
-        }
-
-        JavaBreakpointType.LAMBDA -> {
-            // The ID is the only reliable way to distinguish a lambda breakpoint from a line breakpoint
-            availableBreakpointTypes.find { it.id == "java-lambda" }
         }
 
         JavaBreakpointType.LINE -> {
