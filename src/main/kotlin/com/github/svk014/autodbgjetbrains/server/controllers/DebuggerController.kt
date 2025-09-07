@@ -22,11 +22,17 @@ import kotlinx.serialization.json.jsonPrimitive
 
 /**
  * REST controller for debugger API endpoints
+ * Supports both simple stateless operations and complex stateful operations via StatefulDebuggerController
  */
 class DebuggerController(private val project: Project) {
 
     private val debuggerService: DebuggerIntegrationService by lazy {
         project.service<DebuggerIntegrationService>()
+    }
+
+    // Add the stateful controller for complex operations
+    private val statefulController: StatefulDebuggerController by lazy {
+        StatefulDebuggerController(project)
     }
 
     companion object {
@@ -49,7 +55,18 @@ class DebuggerController(private val project: Project) {
             ApiRoute.of("POST", "/api/debugger/step/over"),
             ApiRoute.of("POST", "/api/debugger/step/into"),
             ApiRoute.of("POST", "/api/debugger/step/out"),
-            ApiRoute.of("POST", "/api/debugger/continueExecution")
+            ApiRoute.of("POST", "/api/debugger/continueExecution"),
+
+            // New high-level DSL operations
+            ApiRoute.of(
+                "POST", "/api/debugger/command", listOf(
+                    ApiField("command", FieldType.STRING, required = true),
+                    ApiField("parameters", FieldType.ANY, required = false)
+                )
+            ),
+            ApiRoute.of(
+                "GET", "/api/debugger/operation/{operationId}", listOf()
+            )
         )
     }
 
@@ -171,6 +188,48 @@ class DebuggerController(private val project: Project) {
                         call.respond(
                             HttpStatusCode.InternalServerError,
                             ApiResponse.error("Failed to continueExecution: ${e.message}")
+                        )
+                    }
+                }
+
+                // New high-level DSL command endpoint
+                post("/command") {
+                    try {
+                        val body = call.receive<JsonObject>()
+                        val command = body["command"]?.jsonPrimitive?.contentOrNull
+                            ?: throw IllegalArgumentException("Command parameter is required")
+
+                        // Extract parameters as a proper map
+                        val parametersJson = body["parameters"]?.let { it as? JsonObject }
+                        val parameters = parametersJson?.mapValues { (_, value) ->
+                            when {
+                                value.jsonPrimitive.isString -> value.jsonPrimitive.content
+                                else -> value.jsonPrimitive.content.toIntOrNull() ?: value.jsonPrimitive.content
+                            }
+                        } ?: emptyMap()
+
+                        val result = statefulController.executeHighLevelCommand(command, parameters)
+                        call.respond(HttpStatusCode.OK, result)
+                    } catch (e: Exception) {
+                        thisLogger().error("Error executing command", e)
+                        call.respond(
+                            HttpStatusCode.BadRequest, ApiResponse.error("Failed to execute command: ${e.message}")
+                        )
+                    }
+                }
+
+                get("/operation/{operationId}") {
+                    try {
+                        val operationId = call.parameters["operationId"]
+                            ?: throw IllegalArgumentException("Operation ID is required")
+                        val parameters = mapOf("operation_id" to operationId)
+                        val result = statefulController.executeHighLevelCommand("get_operation_status", parameters)
+                        call.respond(HttpStatusCode.OK, result)
+                    } catch (e: Exception) {
+                        thisLogger().error("Error getting operation status", e)
+                        call.respond(
+                            HttpStatusCode.InternalServerError,
+                            ApiResponse.error("Failed to get operation status: ${e.message}")
                         )
                     }
                 }
