@@ -1,13 +1,13 @@
 package com.github.svk014.autodbgjetbrains.server.controllers
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
-import com.github.svk014.autodbgjetbrains.debugger.interfaces.BreakpointType
-import com.github.svk014.autodbgjetbrains.debugger.java.JavaBreakpointType
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.models.ApiResponse
 import com.github.svk014.autodbgjetbrains.models.FieldType
 import com.github.svk014.autodbgjetbrains.models.ApiRoute
 import com.github.svk014.autodbgjetbrains.models.ApiField
+import com.github.svk014.autodbgjetbrains.models.BreakpointType
+import com.github.svk014.autodbgjetbrains.models.JavaBreakpointType
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -36,6 +36,7 @@ class DebuggerController(private val project: Project) {
             ApiRoute.of("GET", "/api/debugger/frame/{depth}"),
             ApiRoute.of("GET", "/api/debugger/variables/{frameIndex}"),
             ApiRoute.of("GET", "/api/debugger/call-stack"),
+            ApiRoute.of("GET", "/api/debugger/breakpoint"),
             ApiRoute.of(
                 "POST", "/api/debugger/breakpoint", listOf(
                     ApiField("file", FieldType.STRING, required = true),
@@ -67,10 +68,10 @@ class DebuggerController(private val project: Project) {
 
     suspend fun parseBreakpointReqBody(call: ApplicationCall): ParsedBreakpointRequest {
         val body = call.receive<JsonObject>()
-        val file = body["file"]?.jsonPrimitive?.contentOrNull
-            ?: throw IllegalArgumentException("File parameter is required")
-        val line = body["line"]?.jsonPrimitive?.intOrNull
-            ?: throw IllegalArgumentException("Line parameter is required")
+        val file =
+            body["file"]?.jsonPrimitive?.contentOrNull ?: throw IllegalArgumentException("File parameter is required")
+        val line =
+            body["line"]?.jsonPrimitive?.intOrNull ?: throw IllegalArgumentException("Line parameter is required")
         val lambdaOrdinal = body["lambdaOrdinal"]?.jsonPrimitive?.intOrNull
         val breakPointType = body["breakpointType"]?.jsonPrimitive?.contentOrNull
             ?: throw IllegalArgumentException("Breakpoint Type is required")
@@ -126,12 +127,21 @@ class DebuggerController(private val project: Project) {
                         )
                     }
                 }
-
+                get("/breakpoint") {
+                    try {
+                        val result = debuggerService.getAllBreakpoints()
+                        call.respond(HttpStatusCode.OK, result)
+                    } catch (e: Exception) {
+                        thisLogger().error("Error getting all breakpoints", e)
+                        call.respond(
+                            HttpStatusCode.BadRequest, ApiResponse.error("Failed to get breakpoints: ${e.message}")
+                        )
+                    }
+                }
                 post("/breakpoint") {
                     try {
                         val body = parseBreakpointReqBody(call)
-                        val result =
-                            setBreakpoint(body.file, body.line, body.breakPointType, body.lambdaOrdinal)
+                        val result = setBreakpoint(body.file, body.line, body.breakPointType, body.lambdaOrdinal)
                         call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
                         thisLogger().error("Error setting breakpoint", e)
@@ -143,8 +153,7 @@ class DebuggerController(private val project: Project) {
                 post("/breakpoint/remove") {
                     try {
                         val body = parseBreakpointReqBody(call)
-                        val result =
-                            removeBreakpoint(body.file, body.line, body.breakPointType, body.lambdaOrdinal)
+                        val result = removeBreakpoint(body.file, body.line, body.breakPointType, body.lambdaOrdinal)
                         call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
                         thisLogger().error("Error removing breakpoint", e)

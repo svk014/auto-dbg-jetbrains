@@ -1,13 +1,14 @@
 package com.github.svk014.autodbgjetbrains.debugger
 
 import com.github.svk014.autodbgjetbrains.debugger.factory.DebuggerComponentFactory
-import com.github.svk014.autodbgjetbrains.debugger.interfaces.BreakpointType
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.CallStackRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.FrameRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
 import com.github.svk014.autodbgjetbrains.debugger.java.JavaExecutionController
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
 import com.github.svk014.autodbgjetbrains.debugger.models.SerializedVariable
+import com.github.svk014.autodbgjetbrains.models.BreakpointType
+import com.github.svk014.autodbgjetbrains.models.SerializableBreakpoint
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
 import com.intellij.openapi.application.ApplicationManager
@@ -203,6 +204,17 @@ class DebuggerIntegrationService(private val project: Project) {
                     type = type,
                     lambdaOrdinal = lambdaOrdinal,
                 )
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun getAllBreakpoints(): List<SerializableBreakpoint> = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                val result = executionController.getAllBreakpoints()
                 continuation.resume(result)
             } catch (e: Exception) {
                 continuation.resumeWithException(e)

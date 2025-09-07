@@ -1,7 +1,8 @@
 package com.github.svk014.autodbgjetbrains.debugger.java
 
-import com.github.svk014.autodbgjetbrains.debugger.interfaces.BreakpointType
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.ExecutionController
+import com.github.svk014.autodbgjetbrains.models.BreakpointType
+import com.github.svk014.autodbgjetbrains.models.JavaBreakpointType
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.intellij.debugger.ui.breakpoints.JavaLineBreakpointType
 import com.intellij.debugger.ui.breakpoints.JavaMethodBreakpointType
@@ -14,10 +15,7 @@ import com.intellij.xdebugger.breakpoints.XBreakpointProperties
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
 import com.intellij.xdebugger.impl.breakpoints.XBreakpointUtil
 import org.jetbrains.java.debugger.breakpoints.properties.JavaLineBreakpointProperties
-
-enum class JavaBreakpointType : BreakpointType {
-    LINE, METHOD
-}
+import com.github.svk014.autodbgjetbrains.models.SerializableBreakpoint
 
 class JavaExecutionController(private val project: Project) : ExecutionController {
 
@@ -35,6 +33,34 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
 
     override fun continueExecution() {
         XDebuggerManager.getInstance(project).currentSession?.resume()
+    }
+
+    override fun getAllBreakpoints(): List<SerializableBreakpoint> {
+        val breakpointManager = XDebuggerManager.getInstance(project).breakpointManager
+
+        val breakpoints = breakpointManager.allBreakpoints.map { bp ->
+            val file = bp.sourcePosition?.file?.path
+            val line = bp.sourcePosition?.line
+            if (file == null || line == null) {
+                return@map null
+            }
+            val props = bp.properties
+            val lambdaOrdinal = if (props is JavaLineBreakpointProperties) props.lambdaOrdinal else null
+            val expression = bp.conditionExpression?.expression
+            val breakpointType = when {
+                (bp.type is JavaLineBreakpointType) -> {
+                    JavaBreakpointType.LINE
+                }
+
+                (bp.type is JavaMethodBreakpointType) -> {
+                    JavaBreakpointType.METHOD
+                }
+
+                else -> null
+            }
+            return@map SerializableBreakpoint(lambdaOrdinal, file, line, breakpointType?.name, expression)
+        }
+        return breakpoints.filterNotNull()
     }
 
     override fun setBreakpoint(
@@ -80,11 +106,7 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
 
 
     override fun removeBreakpoint(
-        file: String,
-        line: SourceLine,
-        condition: String?,
-        type: BreakpointType?,
-        lambdaOrdinal: Int?
+        file: String, line: SourceLine, condition: String?, type: BreakpointType?, lambdaOrdinal: Int?
     ): Boolean {
         val breakpointManager = XDebuggerManager.getInstance(project).breakpointManager
         val virtualFile = LocalFileSystem.getInstance().findFileByPath(file)
@@ -92,9 +114,7 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
         val breakpointToRemove = breakpointManager.allBreakpoints.find { bp ->
             val props = bp.properties
             if (props is JavaLineBreakpointProperties && props.lambdaOrdinal != lambdaOrdinal) return@find false
-            return@find bp.sourcePosition?.file == virtualFile &&
-                    bp.sourcePosition?.line == line.zeroBasedNumber &&
-                    bp.conditionExpression?.expression == condition
+            return@find bp.sourcePosition?.file == virtualFile && bp.sourcePosition?.line == line.zeroBasedNumber && bp.conditionExpression?.expression == condition
         }
         if (breakpointToRemove != null) {
             ApplicationManager.getApplication().runWriteAction {
