@@ -87,4 +87,8 @@ class StatefulDebuggerController(private val project: Project) {
         breakpointManager.cleanupControllerBreakpoints()
         breakpointManager.restoreUserBreakpoints()
     }
+
+    suspend fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
+        return expressionEvaluator.evaluateExpression(expression, frameIndex)
+    }
 }

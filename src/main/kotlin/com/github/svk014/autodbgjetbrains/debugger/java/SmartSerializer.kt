@@ -3,7 +3,13 @@ package com.github.svk014.autodbgjetbrains.debugger.java
 import com.github.svk014.autodbgjetbrains.debugger.models.*
 import com.intellij.debugger.engine.JavaValue
 import com.intellij.openapi.diagnostic.thisLogger
+import com.intellij.xdebugger.frame.XValue
 import com.sun.jdi.*
+import kotlin.coroutines.resume
+import kotlin.coroutines.suspendCoroutine
+import com.intellij.xdebugger.frame.XValueNode
+import com.intellij.xdebugger.frame.XValuePlace
+import com.intellij.xdebugger.frame.presentation.XValuePresentation
 
 object SmartSerializer {
 
@@ -21,6 +27,31 @@ object SmartSerializer {
                 thisLogger().error("Error serializing variable: ${variable.name}", e)
                 SerializedVariable(variable.name, ObjectSummary("Error", "Failed to serialize: ${e.message}"))
             }
+        }
+    }
+
+    suspend fun serializeValue(xValue: XValue): LlmVariableValue = suspendCoroutine { continuation ->
+        if (xValue is JavaValue) {
+            val jdiValue = xValue.descriptor.calcValue(xValue.evaluationContext)
+            val visitedObjects = mutableSetOf<ObjectReference>()
+            val serialized = serializeValue(jdiValue, visitedObjects, 0)
+            continuation.resume(serialized)
+        } else {
+            // Fallback for non-Java values
+            val xValueNode = object : XValueNode {
+                override fun setPresentation(icon: javax.swing.Icon?, type: String?, value: String, hasChildren: Boolean) {
+                    val result = BasicValue(type ?: "Unknown", value)
+                    continuation.resume(result)
+                }
+
+                override fun setPresentation(icon: javax.swing.Icon?, presentation: XValuePresentation, hasChildren: Boolean) {
+                    val result = ObjectSummary(presentation.type ?: "Unknown", presentation.toString())
+                    continuation.resume(result)
+                }
+
+                override fun setFullValueEvaluator(fullValueEvaluator: com.intellij.xdebugger.frame.XFullValueEvaluator) {}
+            }
+            xValue.computePresentation(xValueNode, XValuePlace.TREE)
         }
     }
 

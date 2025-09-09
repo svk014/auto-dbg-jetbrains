@@ -2,9 +2,7 @@ package com.github.svk014.autodbgjetbrains.models
 
 import kotlinx.serialization.Serializable
 
-interface BreakpointType
-
-enum class JavaBreakpointType : BreakpointType {
+enum class BreakpointType {
     LINE, METHOD
 }
 

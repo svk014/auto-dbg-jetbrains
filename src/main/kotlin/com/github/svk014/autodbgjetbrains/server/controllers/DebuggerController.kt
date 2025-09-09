@@ -7,7 +7,7 @@ import com.github.svk014.autodbgjetbrains.models.FieldType
 import com.github.svk014.autodbgjetbrains.models.ApiRoute
 import com.github.svk014.autodbgjetbrains.models.ApiField
 import com.github.svk014.autodbgjetbrains.models.BreakpointType
-import com.github.svk014.autodbgjetbrains.models.JavaBreakpointType
+import com.github.svk014.autodbgjetbrains.models.ParsedBreakpointRequest
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -20,7 +20,6 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
 import kotlinx.serialization.json.jsonPrimitive
-import com.github.svk014.autodbgjetbrains.models.ParsedBreakpointRequest
 
 /**
  * REST controller for debugger API endpoints
@@ -32,9 +31,8 @@ class DebuggerController(private val project: Project) {
         project.service<DebuggerIntegrationService>()
     }
 
-    // Add the stateful controller for complex operations
     private val statefulController: StatefulDebuggerController by lazy {
-        StatefulDebuggerController(project)
+        project.service<StatefulDebuggerController>()
     }
 
     companion object {
@@ -93,12 +91,11 @@ class DebuggerController(private val project: Project) {
         val breakPointType = body["breakpointType"]?.jsonPrimitive?.contentOrNull
             ?: throw IllegalArgumentException("Breakpoint Type is required")
 
-
         return ParsedBreakpointRequest(
             file = file,
             line = line,
             lambdaOrdinal = lambdaOrdinal,
-            breakPointType = JavaBreakpointType.valueOf(breakPointType)
+            breakPointType = BreakpointType.valueOf(breakPointType)
         )
     }
 
@@ -186,7 +183,7 @@ class DebuggerController(private val project: Project) {
                         val expression = body["expression"]?.jsonPrimitive?.contentOrNull
                             ?: throw IllegalArgumentException("Expression parameter is required")
                         val frameIndex = body["frameIndex"]?.jsonPrimitive?.intOrNull ?: 0
-                        val result = evaluateExpression(expression, frameIndex)
+                        val result = statefulController.evaluateExpression(expression, frameIndex)
                         call.respond(HttpStatusCode.OK, result)
                     } catch (e: Exception) {
                         thisLogger().error("Error evaluating expression", e)
@@ -253,8 +250,9 @@ class DebuggerController(private val project: Project) {
                         val parametersJson = body["parameters"]?.let { it as? JsonObject }
                         val parameters = parametersJson?.mapValues { (_, value) ->
                             when {
-                                value.jsonPrimitive.isString -> value.jsonPrimitive.content
-                                else -> value.jsonPrimitive.content.toIntOrNull() ?: value.jsonPrimitive.content
+                                value.jsonPrimitive.isString -> value.jsonPrimitive.content as Any
+                                value.jsonPrimitive.intOrNull != null -> value.jsonPrimitive.intOrNull as Any
+                                else -> throw IllegalArgumentException("Unsupported parameter type")
                             }
                         } ?: emptyMap()
 
@@ -272,9 +270,12 @@ class DebuggerController(private val project: Project) {
                     try {
                         val operationId = call.parameters["operationId"]
                             ?: throw IllegalArgumentException("Operation ID is required")
-                        val parameters = mapOf("operation_id" to operationId)
-                        val result = statefulController.executeHighLevelCommand("get_operation_status", parameters)
-                        call.respond(HttpStatusCode.OK, result)
+                        val result = statefulController.getOperationResult(operationId)
+                        if (result != null) {
+                            call.respond(HttpStatusCode.OK, ApiResponse.success(result))
+                        } else {
+                            call.respond(HttpStatusCode.NotFound, ApiResponse.error("Operation with ID $operationId not found"))
+                        }
                     } catch (e: Exception) {
                         thisLogger().error("Error getting operation status", e)
                         call.respond(
@@ -287,20 +288,39 @@ class DebuggerController(private val project: Project) {
         }
     }
 
+    private suspend fun setBreakpoint(
+        file: String, line: Int, breakPointType: BreakpointType, lambaOrdinal: Int?
+    ): ApiResponse {
+        val success = debuggerService.setBreakpoint(file, SourceLine(line), null, breakPointType, lambaOrdinal)
+        return if (success) {
+            ApiResponse.success(mapOf("message" to "Breakpoint set at $file:$line"))
+        } else {
+            ApiResponse.error("Failed to set breakpoint")
+        }
+    }
+
+    private suspend fun removeBreakpoint(
+        file: String, line: Int, breakPointType: BreakpointType, lambaOrdinal: Int?
+    ): ApiResponse {
+        val success = debuggerService.removeBreakpoint(file, SourceLine(line), null, breakPointType, lambaOrdinal)
+        return if (success) {
+            ApiResponse.success(mapOf("message" to "Breakpoint removed from $file:$line"))
+        } else {
+            ApiResponse.error("Failed to remove breakpoint")
+        }
+    }
+
     fun getFrame(depth: Int): ApiResponse {
         val frameInfo = debuggerService.getFrameAt(depth)
         return if (frameInfo != null) {
-            ApiResponse.success(frameInfo)  // Just pass the object directly
+            ApiResponse.success(frameInfo)
         } else {
             ApiResponse.error("No frame available at depth $depth")
         }
     }
 
     fun getVariables(frameIndex: Int): ApiResponse {
-        // For now, use a placeholder frameId - this will need to be improved
-        // when we have proper frame ID management
-        val frameId = "frame_$frameIndex"
-        val variables = debuggerService.getFrameVariables(frameId)
+        val variables = debuggerService.getFrameVariables(frameIndex.toString())
         return ApiResponse.success(variables)
     }
 
@@ -309,26 +329,7 @@ class DebuggerController(private val project: Project) {
         return ApiResponse.success(callStack)
     }
 
-    suspend fun setBreakpoint(
-        file: String, line: Int, breakPointType: BreakpointType, lambaOrdinal: Int?
-    ): ApiResponse {
-        val success = debuggerService.setBreakpoint(file, SourceLine(line), null, breakPointType, lambaOrdinal)
-        return ApiResponse.success(success)
-    }
-
-    suspend fun removeBreakpoint(
-        file: String, line: Int, breakPointType: BreakpointType, lambaOrdinal: Int?
-    ): ApiResponse {
-        val success = debuggerService.removeBreakpoint(file, SourceLine(line), null, breakPointType, lambaOrdinal)
-        return ApiResponse.success(success)
-    }
-
-    fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
-        // Placeholder implementation - expression evaluation not yet implemented
-        return ApiResponse.success(
-            mapOf(
-                "result" to "Expression evaluation not yet implemented", "expression" to expression
-            )
-        )
+    suspend fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
+        return statefulController.evaluateExpression(expression, frameIndex)
     }
 }

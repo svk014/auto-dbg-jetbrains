@@ -1,9 +1,11 @@
 package com.github.svk014.autodbgjetbrains.server.controllers.evaluation
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
+import com.github.svk014.autodbgjetbrains.debugger.java.SmartSerializer
 import com.github.svk014.autodbgjetbrains.debugger.models.ArraySummary
 import com.github.svk014.autodbgjetbrains.debugger.models.BasicValue
 import com.github.svk014.autodbgjetbrains.debugger.models.ObjectSummary
+import com.github.svk014.autodbgjetbrains.models.ApiResponse
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
@@ -12,9 +14,6 @@ import com.intellij.xdebugger.evaluation.EvaluationMode
 import com.intellij.xdebugger.evaluation.XDebuggerEvaluator
 import com.intellij.xdebugger.frame.XStackFrame
 import com.intellij.xdebugger.frame.XValue
-import com.intellij.xdebugger.frame.XValueNode
-import com.intellij.xdebugger.frame.XValuePlace
-import com.intellij.xdebugger.frame.presentation.XValuePresentation
 import com.intellij.xdebugger.impl.XDebugSessionImpl
 import kotlin.coroutines.resume
 import kotlin.coroutines.resumeWithException
@@ -29,10 +28,27 @@ class ExpressionEvaluator(
 ) {
     private val logger = thisLogger()
 
-    /**
-     * Evaluates a condition expression and returns true/false.
-     * This method is now a suspend function to correctly handle the asynchronous evaluation.
-     */
+    suspend fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
+        logger.info("Evaluating expression: $expression at frame index: $frameIndex")
+        return try {
+            val session = XDebuggerManager.getInstance(project).currentSession as? XDebugSessionImpl
+            val stackFrame: XStackFrame? = session?.currentStackFrame
+            val evaluator = stackFrame?.evaluator
+
+            if (evaluator == null) {
+                logger.warn("IntelliJ evaluator not available for frame index: $frameIndex")
+                return ApiResponse.error("Debugger is not in a paused state or frame is invalid.")
+            }
+
+            val xValue = evaluateWithIntelliJ(evaluator, expression)
+            val serializedResult = SmartSerializer.serializeValue(xValue)
+            ApiResponse.success(mapOf("result" to serializedResult))
+        } catch (e: Exception) {
+            logger.error("Error evaluating expression: ${e.message}", e)
+            ApiResponse.error("Failed to evaluate expression: ${e.message}")
+        }
+    }
+
     suspend fun evaluateCondition(condition: String): Boolean {
         return try {
             val session = XDebuggerManager.getInstance(project).currentSession as? XDebugSessionImpl
@@ -44,56 +60,38 @@ class ExpressionEvaluator(
                 return evaluateConditionBasic(condition)
             }
 
-            evaluateConditionWithIntelliJ(evaluator, condition)
+            val xValue = evaluateWithIntelliJ(evaluator, condition)
+            val result = SmartSerializer.serializeValue(xValue)
+            when (result.toString().lowercase()) {
+                "true" -> true
+                "false" -> false
+                else -> result.toString().isNotEmpty() && result.toString() != "null" && result.toString() != "undefined"
+            }
         } catch (e: Exception) {
             logger.warn("Failed to evaluate condition: $condition", e)
             false
         }
     }
 
-    /**
-     * Evaluates a condition using IntelliJ's robust expression evaluator.
-     * This is a suspend function that correctly handles the asynchronous callback.
-     */
-    private suspend fun evaluateConditionWithIntelliJ(evaluator: XDebuggerEvaluator, condition: String): Boolean {
+    private suspend fun evaluateWithIntelliJ(evaluator: XDebuggerEvaluator, expression: String): XValue {
         return suspendCoroutine { continuation ->
             val xExpression = XDebuggerUtil.getInstance()
-                .createExpression(condition, null, null, EvaluationMode.EXPRESSION)
+                .createExpression(expression, null, null, EvaluationMode.EXPRESSION)
 
             val callback = object : XDebuggerEvaluator.XEvaluationCallback {
                 override fun evaluated(xValue: XValue) {
-                    val presentation = object : XValueNode {
-                        override fun setPresentation(icon: javax.swing.Icon?, type: String?, value: String, hasChildren: Boolean) {
-                            val result = when (value.lowercase()) {
-                                "true" -> true
-                                "false" -> false
-                                else -> value.isNotEmpty() && value != "null"
-                            }
-                            continuation.resume(result)
-                        }
-
-                        override fun setPresentation(icon: javax.swing.Icon?, presentation: XValuePresentation, hasChildren: Boolean) {
-                            val result = presentation.type?.lowercase() == "true"
-                            continuation.resume(result)
-                        }
-
-                        override fun setFullValueEvaluator(fullValueEvaluator: com.intellij.xdebugger.frame.XFullValueEvaluator) {}
-                    }
-                    xValue.computePresentation(presentation, XValuePlace.TREE)
+                    continuation.resume(xValue)
                 }
 
                 override fun errorOccurred(errorMessage: String) {
                     logger.warn("Expression evaluation error: $errorMessage")
-                    continuation.resume(false)
+                    continuation.resumeWithException(RuntimeException(errorMessage))
                 }
             }
             evaluator.evaluate(xExpression, callback, null)
         }
     }
 
-    /**
-     * Basic condition evaluation as a fallback.
-     */
     private fun evaluateConditionBasic(condition: String): Boolean {
         // Implementation remains the same, but it should rarely be used now
         return try {
@@ -110,10 +108,6 @@ class ExpressionEvaluator(
         }
     }
 
-    /**
-     * Gets the current variable value for monitoring operations.
-     * This method is now a suspend function and uses the debugger service to get the correct frame.
-     */
     suspend fun getCurrentVariableValue(variableName: String): String? {
         return try {
             val variables = debuggerService.getFrameVariables("0")

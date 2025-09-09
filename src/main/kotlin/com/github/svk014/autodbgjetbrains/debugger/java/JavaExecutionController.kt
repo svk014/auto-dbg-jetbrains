@@ -2,7 +2,7 @@ package com.github.svk014.autodbgjetbrains.debugger.java
 
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.ExecutionController
 import com.github.svk014.autodbgjetbrains.models.BreakpointType
-import com.github.svk014.autodbgjetbrains.models.JavaBreakpointType
+import com.github.svk014.autodbgjetbrains.models.SerializableBreakpoint
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.intellij.debugger.ui.breakpoints.JavaLineBreakpointType
 import com.intellij.debugger.ui.breakpoints.JavaMethodBreakpointType
@@ -15,7 +15,6 @@ import com.intellij.xdebugger.breakpoints.XBreakpointProperties
 import com.intellij.xdebugger.breakpoints.XLineBreakpointType
 import com.intellij.xdebugger.impl.breakpoints.XBreakpointUtil
 import org.jetbrains.java.debugger.breakpoints.properties.JavaLineBreakpointProperties
-import com.github.svk014.autodbgjetbrains.models.SerializableBreakpoint
 
 class JavaExecutionController(private val project: Project) : ExecutionController {
 
@@ -49,11 +48,11 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
             val expression = bp.conditionExpression?.expression
             val breakpointType = when {
                 (bp.type is JavaLineBreakpointType) -> {
-                    JavaBreakpointType.LINE
+                    BreakpointType.LINE
                 }
 
                 (bp.type is JavaMethodBreakpointType) -> {
-                    JavaBreakpointType.METHOD
+                    BreakpointType.METHOD
                 }
 
                 else -> null
@@ -129,11 +128,11 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
     private fun breakpointType(
         type: BreakpointType?, availableBreakpointTypes: List<XLineBreakpointType<*>>
     ): XLineBreakpointType<out XBreakpointProperties<in Any>>? = when (type) {
-        JavaBreakpointType.METHOD -> {
+        BreakpointType.METHOD -> {
             availableBreakpointTypes.find { it is JavaMethodBreakpointType }
         }
 
-        JavaBreakpointType.LINE -> {
+        BreakpointType.LINE -> {
             // Find a breakpoint of the exact JavaLineBreakpointType class, not a subclass.
             availableBreakpointTypes.find { it.javaClass == JavaLineBreakpointType::class.java }
         }
