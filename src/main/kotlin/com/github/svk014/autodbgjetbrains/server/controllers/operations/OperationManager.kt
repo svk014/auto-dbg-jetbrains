@@ -1,5 +1,6 @@
 package com.github.svk014.autodbgjetbrains.server.controllers.operations
 
+import com.github.svk014.autodbgjetbrains.models.OperationResult
 import com.github.svk014.autodbgjetbrains.server.models.*
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock

@@ -1,6 +1,12 @@
 package com.github.svk014.autodbgjetbrains.server.controllers.events
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
+import com.github.svk014.autodbgjetbrains.models.FunctionTraceData
+import com.github.svk014.autodbgjetbrains.models.OperationResult
+import com.github.svk014.autodbgjetbrains.models.SteppingResultData
+import com.github.svk014.autodbgjetbrains.models.TracingResultData
+import com.github.svk014.autodbgjetbrains.models.ValueChangeResultData
+import com.github.svk014.autodbgjetbrains.models.ValueSnapshotData
 import com.github.svk014.autodbgjetbrains.server.controllers.breakpoints.BreakpointManager
 import com.github.svk014.autodbgjetbrains.server.controllers.evaluation.ExpressionEvaluator
 import com.github.svk014.autodbgjetbrains.server.controllers.operations.OperationManager

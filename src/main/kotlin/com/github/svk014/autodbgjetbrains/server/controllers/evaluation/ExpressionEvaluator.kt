@@ -116,7 +116,7 @@ class ExpressionEvaluator(
      */
     suspend fun getCurrentVariableValue(variableName: String): String? {
         return try {
-            val variables = debuggerService.getFrameVariables()
+            val variables = debuggerService.getFrameVariables("0")
             variables[variableName]?.let { variable ->
                 when (val value = variable.value) {
                     is BasicValue -> value.value

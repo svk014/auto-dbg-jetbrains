@@ -1,6 +1,8 @@
 package com.github.svk014.autodbgjetbrains.server.controllers.commands
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
+import com.github.svk014.autodbgjetbrains.models.ApiResponse
+import com.github.svk014.autodbgjetbrains.models.OperationResult
 import com.github.svk014.autodbgjetbrains.server.controllers.breakpoints.BreakpointManager
 import com.github.svk014.autodbgjetbrains.server.controllers.operations.OperationManager
 import com.github.svk014.autodbgjetbrains.server.models.*

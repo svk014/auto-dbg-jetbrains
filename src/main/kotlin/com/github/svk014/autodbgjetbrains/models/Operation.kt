@@ -1,5 +1,7 @@
 package com.github.svk014.autodbgjetbrains.server.models
 
+import com.github.svk014.autodbgjetbrains.models.FunctionTraceData
+import com.github.svk014.autodbgjetbrains.models.ValueSnapshotData
 import kotlinx.serialization.Serializable
 
 @Serializable
