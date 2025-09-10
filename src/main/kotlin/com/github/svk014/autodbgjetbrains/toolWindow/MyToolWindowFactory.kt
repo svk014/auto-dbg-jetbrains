@@ -437,7 +437,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                     add(apiDropdown, BorderLayout.CENTER)
                     val copyApiButton = createStyledButton("\uD83D\uDCC4 Copy", BLUE_COLOR, "Copy API endpoint")
                     copyApiButton.addActionListener {
-                        val selectedEndpoint = apiDropdown.selectedItem as? String
+                        val selectedEndpoint = apiDropdown.selectedItem?.toString()
                         if (selectedEndpoint != null) {
                             val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
                             val endpoint = selectedEndpoint.substringAfter(" ")
