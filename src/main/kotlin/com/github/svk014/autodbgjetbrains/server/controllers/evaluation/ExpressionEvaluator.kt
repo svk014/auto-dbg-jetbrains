@@ -4,8 +4,8 @@ import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.debugger.java.SmartSerializer
 import com.github.svk014.autodbgjetbrains.debugger.models.ArraySummary
 import com.github.svk014.autodbgjetbrains.debugger.models.BasicValue
+import com.github.svk014.autodbgjetbrains.debugger.models.LlmVariableValue
 import com.github.svk014.autodbgjetbrains.debugger.models.ObjectSummary
-import com.github.svk014.autodbgjetbrains.models.ApiResponse
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
@@ -28,25 +28,19 @@ class ExpressionEvaluator(
 ) {
     private val logger = thisLogger()
 
-    suspend fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
+    suspend fun evaluateExpression(expression: String, frameIndex: Int): LlmVariableValue? {
         logger.info("Evaluating expression: $expression at frame index: $frameIndex")
-        return try {
-            val session = XDebuggerManager.getInstance(project).currentSession as? XDebugSessionImpl
-            val stackFrame: XStackFrame? = session?.currentStackFrame
-            val evaluator = stackFrame?.evaluator
+        val session = XDebuggerManager.getInstance(project).currentSession as? XDebugSessionImpl
+        val stackFrame: XStackFrame? = session?.currentStackFrame
+        val evaluator = stackFrame?.evaluator
 
-            if (evaluator == null) {
-                logger.warn("IntelliJ evaluator not available for frame index: $frameIndex")
-                return ApiResponse.error("Debugger is not in a paused state or frame is invalid.")
-            }
-
-            val xValue = evaluateWithIntelliJ(evaluator, expression)
-            val serializedResult = SmartSerializer.serializeValue(xValue)
-            ApiResponse.success(mapOf("result" to serializedResult))
-        } catch (e: Exception) {
-            logger.error("Error evaluating expression: ${e.message}", e)
-            ApiResponse.error("Failed to evaluate expression: ${e.message}")
+        if (evaluator == null) {
+            logger.warn("IntelliJ evaluator not available for frame index: $frameIndex")
+            return null
         }
+
+        val xValue = evaluateWithIntelliJ(evaluator, expression)
+        return SmartSerializer.serializeValue(xValue)
     }
 
     suspend fun evaluateCondition(condition: String): Boolean {

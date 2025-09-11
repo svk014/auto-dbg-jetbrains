@@ -67,17 +67,6 @@ class DebuggerController(private val project: Project) {
             ApiRoute.of("POST", "/api/debugger/step/into"),
             ApiRoute.of("POST", "/api/debugger/step/out"),
             ApiRoute.of("POST", "/api/debugger/continueExecution"),
-
-            // New high-level DSL operations
-            ApiRoute.of(
-                "POST", "/api/debugger/command", listOf(
-                    ApiField("command", FieldType.STRING, required = true),
-                    ApiField("parameters", FieldType.ANY, required = false)
-                )
-            ),
-            ApiRoute.of(
-                "GET", "/api/debugger/operation/{operationId}", listOf()
-            )
         )
     }
 
@@ -238,52 +227,6 @@ class DebuggerController(private val project: Project) {
                         )
                     }
                 }
-
-                // New high-level DSL command endpoint
-                post("/command") {
-                    try {
-                        val body = call.receive<JsonObject>()
-                        val command = body["command"]?.jsonPrimitive?.contentOrNull
-                            ?: throw IllegalArgumentException("Command parameter is required")
-
-                        // Extract parameters as a proper map
-                        val parametersJson = body["parameters"]?.let { it as? JsonObject }
-                        val parameters = parametersJson?.mapValues { (_, value) ->
-                            when {
-                                value.jsonPrimitive.isString -> value.jsonPrimitive.content as Any
-                                value.jsonPrimitive.intOrNull != null -> value.jsonPrimitive.intOrNull as Any
-                                else -> throw IllegalArgumentException("Unsupported parameter type")
-                            }
-                        } ?: emptyMap()
-
-                        val result = statefulController.executeHighLevelCommand(command, parameters)
-                        call.respond(HttpStatusCode.OK, result)
-                    } catch (e: Exception) {
-                        thisLogger().error("Error executing command", e)
-                        call.respond(
-                            HttpStatusCode.BadRequest, ApiResponse.error("Failed to execute command: ${e.message}")
-                        )
-                    }
-                }
-
-                get("/operation/{operationId}") {
-                    try {
-                        val operationId = call.parameters["operationId"]
-                            ?: throw IllegalArgumentException("Operation ID is required")
-                        val result = statefulController.getOperationResult(operationId)
-                        if (result != null) {
-                            call.respond(HttpStatusCode.OK, ApiResponse.success(result))
-                        } else {
-                            call.respond(HttpStatusCode.NotFound, ApiResponse.error("Operation with ID $operationId not found"))
-                        }
-                    } catch (e: Exception) {
-                        thisLogger().error("Error getting operation status", e)
-                        call.respond(
-                            HttpStatusCode.InternalServerError,
-                            ApiResponse.error("Failed to get operation status: ${e.message}")
-                        )
-                    }
-                }
             }
         }
     }
@@ -327,9 +270,5 @@ class DebuggerController(private val project: Project) {
     fun getCallStack(): ApiResponse {
         val callStack = debuggerService.getCallStack()
         return ApiResponse.success(callStack)
-    }
-
-    suspend fun evaluateExpression(expression: String, frameIndex: Int): ApiResponse {
-        return statefulController.evaluateExpression(expression, frameIndex)
     }
 }

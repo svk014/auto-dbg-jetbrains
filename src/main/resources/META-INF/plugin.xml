@@ -12,5 +12,6 @@
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory" id="Auto DBG"/>
         <projectService serviceImplementation="com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService"/>
+        <projectService serviceImplementation="com.github.svk014.autodbgjetbrains.server.controllers.StatefulDebuggerController"/>
     </extensions>
 </idea-plugin>
