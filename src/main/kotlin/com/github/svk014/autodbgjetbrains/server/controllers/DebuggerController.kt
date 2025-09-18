@@ -227,6 +227,43 @@ class DebuggerController(private val project: Project) {
                         )
                     }
                 }
+
+                // New: blocking trace by breakpoint endpoint
+                post("/trace_breakpoint") {
+                    try {
+                        val body = call.receive<JsonObject>()
+                        val file = body["file"]?.jsonPrimitive?.contentOrNull
+                            ?: throw IllegalArgumentException("file is required")
+                        val line = body["line"]?.jsonPrimitive?.intOrNull
+                            ?: throw IllegalArgumentException("line is required")
+                        val breakpointTypeStr = body["breakpointType"]?.jsonPrimitive?.contentOrNull
+                        val breakpointType = try {
+                            if (breakpointTypeStr != null) BreakpointType.valueOf(breakpointTypeStr) else BreakpointType.LINE
+                        } catch (e: Exception) {
+                            BreakpointType.LINE
+                        }
+                        val lambdaOrdinal = body["lambdaOrdinal"]?.jsonPrimitive?.intOrNull
+                        val expression = body["expression"]?.jsonPrimitive?.contentOrNull
+                            ?: throw IllegalArgumentException("expression is required")
+                        val maxHits = body["max_hits"]?.jsonPrimitive?.intOrNull ?: 10
+                        val timeoutMs = body["timeout_ms"]?.jsonPrimitive?.intOrNull ?: 30000
+
+                        val result = statefulController.traceBreakpoint(
+                            file = file,
+                            line = line,
+                            breakpointType = breakpointType,
+                            lambdaOrdinal = lambdaOrdinal,
+                            expression = expression,
+                            maxHits = maxHits,
+                            timeoutMs = timeoutMs.toLong()
+                        )
+
+                        call.respond(HttpStatusCode.OK, result)
+                    } catch (e: Exception) {
+                        thisLogger().error("Error in trace_breakpoint", e)
+                        call.respond(HttpStatusCode.BadRequest, ApiResponse.error("trace_breakpoint failed: ${e.message}"))
+                    }
+                }
             }
         }
     }

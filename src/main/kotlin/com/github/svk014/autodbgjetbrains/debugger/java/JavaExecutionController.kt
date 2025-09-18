@@ -134,12 +134,12 @@ class JavaExecutionController(private val project: Project) : ExecutionControlle
 
         BreakpointType.LINE -> {
             // Find a breakpoint of the exact JavaLineBreakpointType class, not a subclass.
-            availableBreakpointTypes.find { it.javaClass == JavaLineBreakpointType::class.java }
+            availableBreakpointTypes.find { it is JavaLineBreakpointType }
         }
 
         else -> {
             // Default behavior: prefer a standard line breakpoint, but take any if that's not available.
-            availableBreakpointTypes.find { it.javaClass == JavaLineBreakpointType::class.java }
+            availableBreakpointTypes.find { it is JavaLineBreakpointType }
                 ?: availableBreakpointTypes.firstOrNull()
         }
     }

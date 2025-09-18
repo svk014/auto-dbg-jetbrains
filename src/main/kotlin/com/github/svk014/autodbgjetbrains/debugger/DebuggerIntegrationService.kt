@@ -118,7 +118,7 @@ class DebuggerIntegrationService(private val project: Project) {
         return variableRetriever?.getFrameVariables(frameId, maxDepth) ?: emptyMap()
     }
 
-    private fun getCurrentSession(): XDebugSession? {
+    fun getCurrentSession(): XDebugSession? {
         return selectedSessionName?.let { activeSessions[it] }
     }
 
