@@ -196,29 +196,28 @@ paths:
                     timestamp: 1722556800000
 
   /api/debugger/evaluate:
-    get:
+    post:
       summary: Evaluate an expression
       description: Evaluates a code expression in the context of the specified frame
       operationId: evaluateExpression
       tags:
         - Expression Operations
-      parameters:
-        - name: expression
-          in: query
-          required: true
-          description: The expression to evaluate
-          schema:
-            type: string
-            example: "count + 1"
-        - name: frameIndex
-          in: query
-          required: false
-          description: The frame index in which to evaluate the expression
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-            example: 0
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: The expression to evaluate
+                  example: "count + 1"
+                frameIndex:
+                  type: integer
+                  description: The frame index in which to evaluate the expression
+                  default: 0
+                  example: 0
       responses:
         '200':
           description: Expression evaluated successfully
@@ -227,17 +226,98 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
               examples:
-                not_implemented:
-                  summary: Feature not yet implemented
+                success:
+                  summary: Successful evaluation
                   value:
                     success: true
                     data:
-                      result: "Expression evaluation not yet implemented"
+                      result: 42
                       expression: "count + 1"
                     error: null
                     timestamp: 1722556800000
         '400':
           description: Bad request - invalid expression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/trace_breakpoint:
+    post:
+      summary: Trace breakpoint hits and evaluate expression
+      description: Sets a breakpoint, traces its hits, and evaluates an expression each time the breakpoint is hit.
+      operationId: traceBreakpoint
+      tags:
+        - Breakpoint Operations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  description: The full file path where to set the breakpoint
+                  example: "/Users/user1/Documents/personal/SomeJavaProject/src/main/java/com/example/Calculator.java"
+                line:
+                  type: integer
+                  description: The line number where to set the breakpoint
+                  example: 42
+                breakpointType:
+                  type: string
+                  description: The type of breakpoint (e.g., LINE)
+                  default: "LINE"
+                  example: "LINE"
+                lambdaOrdinal:
+                  type: integer
+                  description: Optional lambda ordinal for lambda breakpoints
+                  example: 0
+                expression:
+                  type: string
+                  description: The expression to evaluate at each hit
+                  example: "count + 1"
+                maxHits:
+                  type: integer
+                  description: Maximum number of hits to trace
+                  default: 10
+                  example: 10
+                timeoutMs:
+                  type: integer
+                  description: Timeout in milliseconds for each hit
+                  default: 30000
+                  example: 30000
+      responses:
+        '200':
+          description: Trace completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Trace completed
+                  value:
+                    success: true
+                    data:
+                      hits: 3
+                      traces:
+                        - hitNumber: 1
+                          location: "/src/main/java/com/example/Calculator.java:42"
+                          frameIndex: 0
+                          expressionResult: 43
+                        - hitNumber: 2
+                          location: "/src/main/java/com/example/Calculator.java:42"
+                          frameIndex: 0
+                          expressionResult: 44
+                        - hitNumber: 3
+                          location: "/src/main/java/com/example/Calculator.java:42"
+                          frameIndex: 0
+                          expressionResult: 45
+                      breakpointRemoved: true
+                    error: null
+        '400':
+          description: Bad request - invalid parameters
           content:
             application/json:
               schema:
