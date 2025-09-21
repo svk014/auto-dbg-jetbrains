@@ -250,4 +250,46 @@ class DebuggerIntegrationService(private val project: Project) {
         }
     }
 
+    fun getCurrentDebuggerState(): com.github.svk014.autodbgjetbrains.models.DebuggerState {
+        val availableSessions = refreshAndGetActiveSessionNames()
+        val currentSession = getCurrentSession()
+
+        return when {
+            currentSession == null -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.NOT_CONNECTED,
+                    isConnected = false,
+                    availableSessions = availableSessions
+                )
+            }
+
+            currentSession.isStopped -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.STOPPED,
+                    sessionName = selectedSessionName,
+                    isConnected = true,
+                    availableSessions = availableSessions
+                )
+            }
+
+            currentSession.isPaused -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.PAUSED,
+                    sessionName = selectedSessionName,
+                    currentPosition = getFrameAt(0),
+                    isConnected = true,
+                    availableSessions = availableSessions
+                )
+            }
+
+            else -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.RUNNING,
+                    sessionName = selectedSessionName,
+                    isConnected = true,
+                    availableSessions = availableSessions
+                )
+            }
+        }
+    }
 }

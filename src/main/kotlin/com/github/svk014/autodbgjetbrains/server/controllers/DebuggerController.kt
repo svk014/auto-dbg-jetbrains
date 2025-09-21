@@ -41,6 +41,7 @@ class DebuggerController(private val project: Project) {
             ApiRoute.of("GET", "/api/debugger/variables/{frameIndex}"),
             ApiRoute.of("GET", "/api/debugger/call-stack"),
             ApiRoute.of("GET", "/api/debugger/breakpoint"),
+            ApiRoute.of("GET", "/api/debugger/state"),
             ApiRoute.of(
                 "POST", "/api/debugger/breakpoint", listOf(
                     ApiField("file", FieldType.STRING, required = true),
@@ -138,6 +139,17 @@ class DebuggerController(private val project: Project) {
                         thisLogger().error("Error getting all breakpoints", e)
                         call.respond(
                             HttpStatusCode.BadRequest, ApiResponse.error("Failed to get breakpoints: ${e.message}")
+                        )
+                    }
+                }
+                get("/state") {
+                    try {
+                        val result = debuggerService.getCurrentDebuggerState()
+                        call.respond(HttpStatusCode.OK, ApiResponse.success(result))
+                    } catch (e: Exception) {
+                        thisLogger().error("Error getting debugger state", e)
+                        call.respond(
+                            HttpStatusCode.InternalServerError, ApiResponse.error("Failed to get debugger state: ${e.message}")
                         )
                     }
                 }

@@ -1,10 +1,22 @@
-package com.github.svk014.autodbgjetbrains.server.models
+package com.github.svk014.autodbgjetbrains.models
 
-enum class DebuggerState {
-    IDLE,
-    TRACING_FUNCTION,
-    FINDING_VALUE_CHANGE,
+import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
+import kotlinx.serialization.Serializable
+
+@Serializable
+enum class DebuggerStatus {
+    NOT_CONNECTED,
+    RUNNING,
     PAUSED,
-    STEPPING_THROUGH,
-    WAITING_FOR_CONDITION
+    STOPPED,
+    UNKNOWN
 }
+
+@Serializable
+data class DebuggerState(
+    val status: DebuggerStatus,
+    val sessionName: String? = null,
+    val currentPosition: FrameInfo? = null,
+    val isConnected: Boolean = false,
+    val availableSessions: List<String> = emptyList()
+)
