@@ -18,6 +18,7 @@ servers:
 paths:
   /api/debugger/frame/{depth}:
     get:
+      x-tool-name: frame_at_depth
       summary: Get frame information at specific depth
       description: Retrieves frame information from the call stack at the specified depth
       operationId: getFrame
@@ -66,6 +67,7 @@ paths:
 
   /api/debugger/variables/{frameIndex}:
     get:
+      x-tool-name: variables_for_frame
       summary: Get variables for a specific frame
       description: Retrieves all variables visible in the specified frame
       operationId: getVariables
@@ -104,6 +106,7 @@ paths:
 
   /api/debugger/evaluate:
     post:
+      x-tool-name: evaluate_expression
       summary: Evaluate an expression
       description: Evaluates a code expression in the context of the specified frame
       operationId: evaluateExpression
@@ -151,6 +154,7 @@ paths:
 
   /api/debugger/trace_breakpoint:
     post:
+      x-tool-name: trace_breakpoint
       summary: Automated Breakpoint Tracing for Program Analysis
       description: |
         **Advanced automated debugging tool for non-intrusive program analysis.**
@@ -282,6 +286,7 @@ paths:
 
   /api/debugger/state:
     get:
+      x-tool-name: debugger_state
       summary: Get current debugger state
       description: Retrieves the current state of the debugger including connection status, session information, and current position if paused
       operationId: getDebuggerState
@@ -334,6 +339,263 @@ paths:
                       isConnected: false
                       availableSessions: ["Main", "Test Session"]
                     error: null
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/step/over:
+    post:
+      x-tool-name: step_over_exec
+      summary: Step over the current line
+      description: |
+        Executes the current line and pauses at the next line in the same method or the calling method.
+        
+        **Step Over Behavior:**
+        - If the current line contains a method call, the entire method is executed without stepping into it
+        - Execution pauses at the next line in the current method
+        - If the current line is the last line of a method, execution pauses at the calling method
+        - Maintains the current debugging context and variable scope
+        
+        **Use Cases:**
+        - Skip over method calls you don't want to debug
+        - Move through code line by line within the current method
+        - Quickly execute utility or library method calls
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused (at a breakpoint or after a previous step)
+        
+        This operation resumes execution temporarily and will pause again at the next appropriate line.
+      operationId: stepOver
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Step over command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Step over completed
+                  value:
+                    success: true
+                    data:
+                      message: "Step over executed successfully"
+                      action: "STEP_OVER"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for stepping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                not_paused:
+                  summary: Debugger not paused
+                  value:
+                    success: false
+                    data: null
+                    error: "Cannot step over: debugger is not paused"
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/step/into:
+    post:
+      x-tool-name: step_into_exec
+      summary: Step into the current line
+      description: |
+        Steps into method calls on the current line, allowing detailed debugging of called methods.
+        
+        **Step Into Behavior:**
+        - If the current line contains a method call, execution pauses at the first line of the called method
+        - If the current line doesn't contain method calls, behaves like step over
+        - Allows debugging of nested method calls and constructor calls
+        - Preserves full call stack context for navigation
+        
+        **Use Cases:**
+        - Debug the implementation of a specific method call
+        - Trace execution flow through multiple method layers
+        - Investigate issues within called methods
+        - Understand complex object initialization or constructor behavior
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused
+        - Source code must be available for the method being stepped into
+        
+        This operation is essential for deep debugging and understanding code execution flow.
+      operationId: stepInto
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Step into command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Step into completed
+                  value:
+                    success: true
+                    data:
+                      message: "Step into executed successfully"
+                      action: "STEP_INTO"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for stepping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/step/out:
+    post:
+      x-tool-name: step_out_exec
+      summary: Step out of the current method
+      description: |
+        Completes execution of the current method and pauses at the calling method.
+        
+        **Step Out Behavior:**
+        - Executes all remaining lines in the current method
+        - Pauses at the line in the calling method that made the method call
+        - Returns to the previous level in the call stack
+        - Useful for quickly exiting from deep method calls
+        
+        **Use Cases:**
+        - Exit from a method you've finished debugging
+        - Return to a higher level in the call stack
+        - Skip the remaining execution of a long method
+        - Navigate back to the calling context after investigating a method
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused
+        - Must not be at the top level of the call stack
+        
+        If already at the main method or top-level, this may continue execution until the next breakpoint.
+      operationId: stepOut
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Step out command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Step out completed
+                  value:
+                    success: true
+                    data:
+                      message: "Step out executed successfully"
+                      action: "STEP_OUT"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for stepping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/continue:
+    post:
+      x-tool-name: continue_execution
+      summary: Continue program execution
+      description: |
+        Resumes program execution from the current paused state until the next breakpoint or program termination.
+        
+        **Continue Execution Behavior:**
+        - Resumes normal program flow from the current position
+        - Execution continues until it hits another breakpoint, encounters an exception, or the program terminates
+        - All active breakpoints remain enabled and functional
+        - Variables and program state continue to change during execution
+        
+        **Use Cases:**
+        - Resume normal program flow after examining variables or call stack
+        - Continue to the next breakpoint in the execution path
+        - Complete program execution after debugging specific sections
+        - Test program behavior with current variable states
+        
+        **Important Notes:**
+        - After continuing, the debugger state will change to "RUNNING" until the next pause
+        - If no more breakpoints are hit, the program may complete execution
+        - Any breakpoints set in the execution path will still trigger
+        - Use the `/api/debugger/state` endpoint to check if execution has paused again
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused
+      operationId: continueExecution
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Continue command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Continue execution started
+                  value:
+                    success: true
+                    data:
+                      message: "Program execution resumed"
+                      action: "CONTINUE"
+                      status: "RUNNING"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for continuing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                not_paused:
+                  summary: Debugger not paused
+                  value:
+                    success: false
+                    data: null
+                    error: "Cannot continue: debugger is not paused"
+                    timestamp: 1722556800000
+                not_connected:
+                  summary: No session connected
+                  value:
+                    success: false
+                    data: null
+                    error: "Cannot continue: no debugger session connected"
                     timestamp: 1722556800000
         '500':
           description: Internal server error
@@ -476,3 +738,5 @@ tags:
     description: Operations for evaluating expressions
   - name: Debugger State
     description: Operations for retrieving the debugger's current state
+  - name: Execution Control
+    description: Operations for controlling program execution (step over, step into, etc.)
