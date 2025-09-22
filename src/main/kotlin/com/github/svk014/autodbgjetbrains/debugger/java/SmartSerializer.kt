@@ -5,53 +5,45 @@ import com.intellij.debugger.engine.JavaValue
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.xdebugger.frame.XValue
 import com.sun.jdi.*
-import kotlin.coroutines.resume
-import kotlin.coroutines.suspendCoroutine
-import com.intellij.xdebugger.frame.XValueNode
-import com.intellij.xdebugger.frame.XValuePlace
-import com.intellij.xdebugger.frame.presentation.XValuePresentation
 
 object SmartSerializer {
 
     private const val MAX_DEPTH = 3
 
     fun serializeVariables(variables: List<JavaValue>): List<SerializedVariable> {
-        val visitedObjects = mutableSetOf<ObjectReference>()
+        if (variables.isEmpty()) return emptyList()
 
-        return variables.map { variable ->
-            try {
-                val jdiValue = variable.descriptor.calcValue(variable.evaluationContext)
-                val serializedValue = serializeValue(jdiValue, visitedObjects, 0)
-                SerializedVariable(variable.name, serializedValue)
-            } catch (e: Exception) {
-                thisLogger().error("Error serializing variable: ${variable.name}", e)
-                SerializedVariable(variable.name, ObjectSummary("Error", "Failed to serialize: ${e.message}"))
+        // Group variables by their manager thread to handle mixed sessions
+        val variablesByThread = variables.groupBy { it.evaluationContext.debugProcess.managerThread }
+
+        return variablesByThread.flatMap { (managerThread, threadVariables) ->
+            val visitedObjects = mutableSetOf<ObjectReference>()
+
+            managerThread.run {
+                threadVariables.map { variable ->
+                    try {
+                        val jdiValue = variable.descriptor.calcValue(variable.evaluationContext)
+                        val serializedValue = serializeValue(jdiValue, visitedObjects, 0)
+                        SerializedVariable(variable.name, serializedValue)
+                    } catch (e: Exception) {
+                        thisLogger().error("Error serializing variable: ${variable.name}", e)
+                        SerializedVariable(variable.name, ObjectSummary("Error", "Failed to serialize: ${e.message}"))
+                    }
+                }
             }
         }
     }
 
-    suspend fun serializeValue(xValue: XValue): LlmVariableValue = suspendCoroutine { continuation ->
+    fun serializeValue(xValue: XValue): LlmVariableValue {
         if (xValue is JavaValue) {
-            val jdiValue = xValue.descriptor.calcValue(xValue.evaluationContext)
-            val visitedObjects = mutableSetOf<ObjectReference>()
-            val serialized = serializeValue(jdiValue, visitedObjects, 0)
-            continuation.resume(serialized)
-        } else {
-            // Fallback for non-Java values
-            val xValueNode = object : XValueNode {
-                override fun setPresentation(icon: javax.swing.Icon?, type: String?, value: String, hasChildren: Boolean) {
-                    val result = BasicValue(type ?: "Unknown", value)
-                    continuation.resume(result)
-                }
-
-                override fun setPresentation(icon: javax.swing.Icon?, presentation: XValuePresentation, hasChildren: Boolean) {
-                    val result = ObjectSummary(presentation.type ?: "Unknown", presentation.toString())
-                    continuation.resume(result)
-                }
-
-                override fun setFullValueEvaluator(fullValueEvaluator: com.intellij.xdebugger.frame.XFullValueEvaluator) {}
+            val managerThread = xValue.evaluationContext.debugProcess.managerThread
+            return managerThread.run {
+                val jdiValue = xValue.descriptor.calcValue(xValue.evaluationContext)
+                val visitedObjects = mutableSetOf<ObjectReference>()
+                serializeValue(jdiValue, visitedObjects, 0)
             }
-            xValue.computePresentation(xValueNode, XValuePlace.TREE)
+        } else {
+            return ObjectSummary("Non-Java", "Use async evaluation for non-Java values")
         }
     }
 
