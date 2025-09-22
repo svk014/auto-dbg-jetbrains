@@ -284,6 +284,106 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
 
+  /api/debugger/breakpoint:
+    post:
+      x-tool-name: set_breakpoint
+      summary: Set a breakpoint at a specific location
+      description: |
+        Sets a breakpoint at the specified file and line number for debugging purposes.
+        
+        **Set Breakpoint Behavior:**
+        - Creates a new breakpoint at the specified location
+        - Breakpoint will pause execution when the line is reached
+        - Supports different breakpoint types (LINE, METHOD, etc.)
+        - Breakpoint persists until manually removed or session ends
+        - Multiple breakpoints can be set simultaneously
+        
+        **Use Cases:**
+        - Pause execution at specific lines for debugging
+        - Set breakpoints with different types for various debugging scenarios
+        - Create multiple breakpoints for complex debugging workflows
+        - Set breakpoints programmatically for automated debugging
+        
+        **Requirements:**
+        - Valid source file path that exists in the current project
+        - Line number must be a valid executable line in the source file
+        - Debugger session must be active (though execution can be running or paused)
+        
+        **Breakpoint Management:**
+        - Each breakpoint is identified by its file path, line number, and type
+        - Setting a breakpoint at an existing location will update the existing breakpoint
+        - Breakpoints remain active across debug session pauses and resumes
+        - Use the remove endpoint to clean up breakpoints when no longer needed
+      operationId: setBreakpoint
+      tags:
+        - Breakpoint Operations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file
+                - line
+                - breakpointType
+              properties:
+                file:
+                  type: string
+                  description: The full file path where to set the breakpoint
+                  example: "/Users/user1/Documents/personal/SomeJavaProject/src/main/java/com/example/Calculator.java"
+                line:
+                  type: integer
+                  description: The line number where to set the breakpoint (1-based)
+                  minimum: 1
+                  example: 42
+                breakpointType:
+                  type: string
+                  description: The type of breakpoint to set
+                  default: "LINE"
+                  example: "LINE"
+                lambdaOrdinal:
+                  type: integer
+                  description: Optional lambda ordinal for breakpoints within lambda expressions
+                  minimum: 0
+                  example: 0
+      responses:
+        '200':
+          description: Breakpoint set successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Breakpoint set successfully
+                  value:
+                    success: true
+                    data:
+                      message: "Breakpoint set at /src/main/java/com/example/Calculator.java:42"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - invalid parameters or location
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                invalid_file:
+                  summary: Invalid file path
+                  value:
+                    success: false
+                    data: null
+                    error: "Failed to set breakpoint: File does not exist"
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
   /api/debugger/state:
     get:
       x-tool-name: debugger_state
@@ -527,7 +627,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
 
-  /api/debugger/continue:
+  /api/debugger/continueExecution:
     post:
       x-tool-name: continue_execution
       summary: Continue program execution
@@ -571,9 +671,7 @@ paths:
                   value:
                     success: true
                     data:
-                      message: "Program execution resumed"
-                      action: "CONTINUE"
-                      status: "RUNNING"
+                      stepped: true
                     error: null
                     timestamp: 1722556800000
         '400':
@@ -588,14 +686,7 @@ paths:
                   value:
                     success: false
                     data: null
-                    error: "Cannot continue: debugger is not paused"
-                    timestamp: 1722556800000
-                not_connected:
-                  summary: No session connected
-                  value:
-                    success: false
-                    data: null
-                    error: "Cannot continue: no debugger session connected"
+                    error: "Failed to continueExecution: debugger is not paused"
                     timestamp: 1722556800000
         '500':
           description: Internal server error
@@ -718,7 +809,7 @@ components:
           example: true
         message:
           type: string
-          description: Description of the operation result
+          description: Description of the operation
           example: "Operation completed successfully"
         details:
           type: object
