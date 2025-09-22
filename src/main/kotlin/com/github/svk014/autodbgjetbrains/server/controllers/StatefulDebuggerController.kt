@@ -107,7 +107,7 @@ class StatefulDebuggerController(private val project: Project) {
 
                 // Collect trace data here
                 hits++
-                val result = expressionEvaluator.evaluateExpression("i", 0)
+                val result = expressionEvaluator.evaluateExpression(expression, 0)
                 if (result != null) {
                     traces.add(
                         TraceHit(

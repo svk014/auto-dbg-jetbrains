@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: JetBrains Debugger API
   description: REST API for accessing JetBrains IDE debugger functionality
-  version: 0.1.0
+  version: 0.2.0
   contact:
     name: Auto DBG JetBrains Plugin
     url: https://github.com/svk014/auto-dbg-jetbrains
@@ -151,8 +151,45 @@ paths:
 
   /api/debugger/trace_breakpoint:
     post:
-      summary: Trace breakpoint hits and evaluate expression
-      description: Sets a breakpoint, traces its hits, and evaluates an expression each time the breakpoint is hit.
+      summary: Automated Breakpoint Tracing for Program Analysis
+      description: |
+        **Advanced automated debugging tool for non-intrusive program analysis.**
+        
+        This API enables sophisticated debugging workflows by automatically:
+        
+        **Core Capabilities:**
+        - Sets a temporary breakpoint at the specified file and line
+        - Automatically captures program execution when the breakpoint is hit
+        - Evaluates custom expressions in the context of each breakpoint hit
+        - Collects structured execution traces across multiple hits
+        - Manages breakpoint lifecycle (setup, monitoring, cleanup)
+        
+        **Automated Workflow:**
+        1. Temporarily disables user breakpoints to prevent interference
+        2. Sets a breakpoint at the target location
+        3. Monitors program execution and waits for breakpoint hits
+        4. Evaluates the provided expression each time the breakpoint triggers
+        5. Collects trace data showing how values change over time
+        6. Automatically removes the temporary breakpoint
+        7. Restores user breakpoints to their original state
+        
+        **Use Cases for Automated Debugging:**
+        - **Variable Tracking**: Monitor how variables change across loop iterations
+        - **Condition Analysis**: Track when specific conditions become true/false
+        - **Performance Profiling**: Count executions or measure timing
+        - **Bug Reproduction**: Automatically collect data when certain code paths execute
+        - **Regression Testing**: Verify consistent behavior across code changes
+        - **AI-Assisted Debugging**: Gather systematic program state data for analysis
+        
+        **Non-Intrusive Design:**
+        - Operates without modifying source code
+        - Preserves existing debugging session state
+        - Handles timeout scenarios gracefully
+        - Provides structured output for programmatic analysis
+        
+        **Example Scenario:**
+        To track how a counter variable changes in a loop, set the breakpoint inside the loop
+        and use expression "counter + index" to see the progression across iterations.
       operationId: traceBreakpoint
       tags:
         - Breakpoint Operations
@@ -162,6 +199,10 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+                - file
+                - line
+                - expression
               properties:
                 file:
                   type: string
@@ -169,30 +210,39 @@ paths:
                   example: "/Users/user1/Documents/personal/SomeJavaProject/src/main/java/com/example/Calculator.java"
                 line:
                   type: integer
-                  description: The line number where to set the breakpoint
+                  description: The line number where to set the breakpoint (1-based)
+                  minimum: 1
                   example: 42
                 breakpointType:
                   type: string
-                  description: The type of breakpoint (e.g., LINE)
+                  description: The type of breakpoint to set
                   default: "LINE"
                   example: "LINE"
                 lambdaOrdinal:
                   type: integer
-                  description: Optional lambda ordinal for lambda breakpoints
+                  description: Optional lambda ordinal for breakpoints within lambda expressions
+                  minimum: 0
                   example: 0
                 expression:
                   type: string
-                  description: The expression to evaluate at each hit
+                  description: |
+                    The expression to evaluate at each breakpoint hit. Can access local variables,
+                    method parameters, and object fields visible at the breakpoint location.
+                    Examples: "count", "arr.length", "x + y", "user.getName()"
                   example: "count + 1"
                 maxHits:
                   type: integer
-                  description: Maximum number of hits to trace
+                  description: Maximum number of breakpoint hits to trace before stopping
                   default: 10
+                  minimum: 1
+                  maximum: 100
                   example: 10
                 timeoutMs:
                   type: integer
-                  description: Timeout in milliseconds for each hit
+                  description: Timeout in milliseconds to wait for each breakpoint hit
                   default: 30000
+                  minimum: 1000
+                  maximum: 300000
                   example: 30000
       responses:
         '200':
