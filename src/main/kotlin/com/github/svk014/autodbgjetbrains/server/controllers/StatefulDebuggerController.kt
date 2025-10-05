@@ -7,6 +7,7 @@ import com.github.svk014.autodbgjetbrains.models.BreakpointType
 import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.server.controllers.breakpoints.BreakpointManager
 import com.github.svk014.autodbgjetbrains.server.controllers.evaluation.ExpressionEvaluator
+import com.intellij.openapi.components.Service
 import com.intellij.openapi.components.service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
@@ -29,6 +30,7 @@ data class TraceBreakpointResult(
     val breakpointRemoved: Boolean
 )
 
+@Service(Service.Level.PROJECT)
 class StatefulDebuggerController(private val project: Project) {
 
     private val debuggerService: DebuggerIntegrationService by lazy {

@@ -54,6 +54,23 @@ class DebuggerIntegrationService(private val project: Project) {
         return sessionNames
     }
 
+    fun getDebugSessions(): Array<XDebugSession> {
+        return XDebuggerManager.getInstance(project).debugSessions
+    }
+
+    fun connectToCurrentSession() {
+        val currentSession = XDebuggerManager.getInstance(project).currentSession
+        println(currentSession)
+        if (currentSession != null && !currentSession.isStopped) {
+            connectToSession(currentSession.sessionName)
+        } else {
+            thisLogger().warn("No current active debug session to connect to.")
+            appendLog("Error: No current active debug session found.")
+            clearComponents()
+        }
+    }
+
+
     /**
      * Connects to a specific debug session by its name and initializes the appropriate retrievers.
      * This should be called when the user selects a session from the tool window dropdown and clicks "Connect".
