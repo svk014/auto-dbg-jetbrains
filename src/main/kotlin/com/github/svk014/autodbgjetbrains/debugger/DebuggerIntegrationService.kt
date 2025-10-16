@@ -4,14 +4,22 @@ import com.github.svk014.autodbgjetbrains.debugger.factory.DebuggerComponentFact
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.CallStackRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.FrameRetriever
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.VariableRetriever
+import com.github.svk014.autodbgjetbrains.debugger.java.JavaExecutionController
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
-import com.github.svk014.autodbgjetbrains.debugger.models.Variable
+import com.github.svk014.autodbgjetbrains.debugger.models.SerializedVariable
+import com.github.svk014.autodbgjetbrains.models.BreakpointType
+import com.github.svk014.autodbgjetbrains.models.SerializableBreakpoint
+import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory.MyToolWindow.Companion.appendLog
+import com.intellij.openapi.application.ApplicationManager
 import com.intellij.openapi.components.Service
 import com.intellij.openapi.diagnostic.thisLogger
 import com.intellij.openapi.project.Project
-import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.XDebugSession
+import com.intellij.xdebugger.XDebuggerManager
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 @Service(Service.Level.PROJECT)
 class DebuggerIntegrationService(private val project: Project) {
@@ -24,6 +32,9 @@ class DebuggerIntegrationService(private val project: Project) {
     private var callStackRetriever: CallStackRetriever? = null
     private var variableRetriever: VariableRetriever? = null
     private var selectedSessionName: String? = null
+
+
+    private var executionController: JavaExecutionController = JavaExecutionController(project)
 
     /**
      * Manually queries the IDE for all active debug sessions, updates the internal map,
@@ -42,6 +53,23 @@ class DebuggerIntegrationService(private val project: Project) {
         appendLog("Found active sessions: $sessionNames")
         return sessionNames
     }
+
+    fun getDebugSessions(): Array<XDebugSession> {
+        return XDebuggerManager.getInstance(project).debugSessions
+    }
+
+    fun connectToCurrentSession() {
+        val currentSession = XDebuggerManager.getInstance(project).currentSession
+        println(currentSession)
+        if (currentSession != null && !currentSession.isStopped) {
+            connectToSession(currentSession.sessionName)
+        } else {
+            thisLogger().warn("No current active debug session to connect to.")
+            appendLog("Error: No current active debug session found.")
+            clearComponents()
+        }
+    }
+
 
     /**
      * Connects to a specific debug session by its name and initializes the appropriate retrievers.
@@ -103,15 +131,19 @@ class DebuggerIntegrationService(private val project: Project) {
         return callStackRetriever?.getCallStack(maxDepth) ?: emptyList()
     }
 
-    fun getFrameVariables(frameId: String, maxDepth: Int = 3): Map<String, Variable> {
+    fun getFrameVariables(frameId: String, maxDepth: Int = 3): Map<String, SerializedVariable> {
         return variableRetriever?.getFrameVariables(frameId, maxDepth) ?: emptyMap()
+    }
+
+    fun getCurrentSession(): XDebugSession? {
+        return selectedSessionName?.let { activeSessions[it] }
     }
 
     /**
      * Pauses the currently connected debug session.
      */
     fun pauseCurrentSession() {
-        val session = selectedSessionName?.let { activeSessions[it] }
+        val session = getCurrentSession()
         if (session != null) {
             if (!session.isStopped && !session.isPaused) {
                 session.pause()
@@ -121,6 +153,143 @@ class DebuggerIntegrationService(private val project: Project) {
             }
         } else {
             appendLog("Error: No session is currently connected to pause.")
+        }
+    }
+
+    // --- Step control methods ---
+    suspend fun stepOver(): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                executionController.stepOver()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun stepInto(): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                executionController.stepInto()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun stepOut(): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                executionController.stepOut()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun setBreakpoint(
+        file: String, line: SourceLine, condition: String?, type: BreakpointType?, lambdaOrdinal: Int?,
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                val result = executionController.setBreakpoint(
+                    file = file,
+                    line = line,
+                    condition = condition,
+                    type = type,
+                    lambdaOrdinal = lambdaOrdinal,
+                )
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun removeBreakpoint(
+        file: String, line: SourceLine, condition: String?, type: BreakpointType?, lambdaOrdinal: Int?,
+    ): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                val result = executionController.removeBreakpoint(
+                    file = file,
+                    line = line,
+                    condition = condition,
+                    type = type,
+                    lambdaOrdinal = lambdaOrdinal,
+                )
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun getAllBreakpoints(): List<SerializableBreakpoint> = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                val result = executionController.getAllBreakpoints()
+                continuation.resume(result)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    suspend fun continueExecution(): Boolean = suspendCancellableCoroutine { continuation ->
+        ApplicationManager.getApplication().invokeLater {
+            try {
+                executionController.continueExecution()
+                continuation.resume(true)
+            } catch (e: Exception) {
+                continuation.resumeWithException(e)
+            }
+        }
+    }
+
+    fun getCurrentDebuggerState(): com.github.svk014.autodbgjetbrains.models.DebuggerState {
+        val availableSessions = refreshAndGetActiveSessionNames()
+        val currentSession = getCurrentSession()
+
+        return when {
+            currentSession == null -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.NOT_CONNECTED,
+                    isConnected = false,
+                    availableSessions = availableSessions
+                )
+            }
+
+            currentSession.isStopped -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.STOPPED,
+                    sessionName = selectedSessionName,
+                    isConnected = true,
+                    availableSessions = availableSessions
+                )
+            }
+
+            currentSession.isPaused -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.PAUSED,
+                    sessionName = selectedSessionName,
+                    currentPosition = getFrameAt(0),
+                    isConnected = true,
+                    availableSessions = availableSessions
+                )
+            }
+
+            else -> {
+                com.github.svk014.autodbgjetbrains.models.DebuggerState(
+                    status = com.github.svk014.autodbgjetbrains.models.DebuggerStatus.RUNNING,
+                    sessionName = selectedSessionName,
+                    isConnected = true,
+                    availableSessions = availableSessions
+                )
+            }
         }
     }
 }

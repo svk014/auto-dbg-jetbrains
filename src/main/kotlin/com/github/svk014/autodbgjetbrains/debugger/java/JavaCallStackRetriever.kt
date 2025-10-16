@@ -2,6 +2,7 @@ package com.github.svk014.autodbgjetbrains.debugger.java
 
 import com.github.svk014.autodbgjetbrains.debugger.interfaces.CallStackRetriever
 import com.github.svk014.autodbgjetbrains.debugger.models.FrameInfo
+import com.github.svk014.autodbgjetbrains.models.SourceLine
 import com.intellij.openapi.project.Project
 import com.intellij.xdebugger.XDebuggerManager
 import com.intellij.xdebugger.frame.XStackFrame
@@ -23,15 +24,17 @@ class JavaCallStackRetriever(private val project: Project) : CallStackRetriever 
 
             // Get the stack frames
             val frames = mutableListOf<XStackFrame>()
-            activeExecutionStack.computeStackFrames(0, object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
-                override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
-                    frames.addAll(stackFrames.take(maxDepth))
-                }
+            activeExecutionStack.computeStackFrames(
+                0,
+                object : com.intellij.xdebugger.frame.XExecutionStack.XStackFrameContainer {
+                    override fun addStackFrames(stackFrames: List<XStackFrame>, last: Boolean) {
+                        frames.addAll(stackFrames.take(maxDepth))
+                    }
 
-                override fun errorOccurred(errorMessage: String) {
-                    // Handle error - frames will remain empty
-                }
-            })
+                    override fun errorOccurred(errorMessage: String) {
+                        // Handle error - frames will remain empty
+                    }
+                })
 
             // Convert XStackFrames to FrameInfo objects
             frames.mapIndexedNotNull { index, frame ->
@@ -41,7 +44,7 @@ class JavaCallStackRetriever(private val project: Project) : CallStackRetriever 
 
                 FrameInfo(
                     methodName = extractMethodName(frame),
-                    lineNumber = sourcePosition?.line ?: -1,
+                    lineNumber = SourceLine.zeroToOneBased(sourcePosition?.line),
                     filePath = sourcePosition?.file?.path ?: "Unknown"
                 )
             }
@@ -64,13 +67,16 @@ class JavaCallStackRetriever(private val project: Project) : CallStackRetriever 
                     val methodPart = frameString.substringAfter("at ").substringBefore("(")
                     methodPart.substringAfterLast(".")
                 }
+
                 frameString.contains("::") -> {
                     frameString.substringAfter("::").substringBefore("(")
                 }
+
                 frameString.contains(".") -> {
                     // Extract method name from class.method format
                     frameString.substringAfterLast(".").substringBefore("(").substringBefore(" ")
                 }
+
                 else -> "Unknown Method"
             }
         } catch (e: Exception) {

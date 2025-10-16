@@ -2,6 +2,9 @@ package com.github.svk014.autodbgjetbrains.toolWindow
 
 import com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService
 import com.github.svk014.autodbgjetbrains.server.DebuggerApiServer
+import com.github.svk014.autodbgjetbrains.server.controllers.DebuggerController
+import com.github.svk014.autodbgjetbrains.models.ApiRoute
+import com.github.svk014.autodbgjetbrains.models.FieldType
 import com.intellij.openapi.components.service
 import com.intellij.openapi.project.Project
 import com.intellij.openapi.wm.ToolWindow
@@ -12,7 +15,6 @@ import java.awt.*
 import java.awt.datatransfer.StringSelection
 import java.awt.event.MouseWheelEvent
 import javax.swing.*
-import javax.swing.border.CompoundBorder
 
 class MyToolWindowFactory : ToolWindowFactory {
 
@@ -58,9 +60,7 @@ class MyToolWindowFactory : ToolWindowFactory {
 
             // Custom button class that extends JComponent
             private class StyledButton(
-                private val text: String,
-                private val bgColor: Color,
-                tooltipText: String? = null
+                private val text: String, private val bgColor: Color, tooltipText: String? = null
             ) : JComponent() {
                 private var isHovered = false
                 private var isPressed = false
@@ -99,7 +99,9 @@ class MyToolWindowFactory : ToolWindowFactory {
                             if (isButtonEnabled && isPressed) {
                                 isPressed = false
                                 repaint()
-                                val event = java.awt.event.ActionEvent(this@StyledButton, java.awt.event.ActionEvent.ACTION_PERFORMED, text)
+                                val event = java.awt.event.ActionEvent(
+                                    this@StyledButton, java.awt.event.ActionEvent.ACTION_PERFORMED, text
+                                )
                                 actionListeners.forEach { it.actionPerformed(event) }
                             }
                         }
@@ -133,6 +135,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                             minOf(255, (bgColor.green * 1.2).toInt()),
                             minOf(255, (bgColor.blue * 1.2).toInt())
                         )
+
                         else -> bgColor
                     }
 
@@ -229,10 +232,11 @@ class MyToolWindowFactory : ToolWindowFactory {
             // Initialize with server status
             updateServerStatusLabel(apiServer.isRunning())
 
-            val portLabel = JLabel("Port: ${if (apiServer.isRunning()) apiServer.getServerPort() else "Not running"}").apply {
-                foreground = TEXT_COLOR
-                font = font.deriveFont(12f)
-            }
+            val portLabel =
+                JLabel("Port: ${if (apiServer.isRunning()) apiServer.getServerPort() else "Not running"}").apply {
+                    foreground = TEXT_COLOR
+                    font = font.deriveFont(12f)
+                }
 
             val urlPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 4)).apply {
                 background = SECTION_BG
@@ -268,7 +272,9 @@ class MyToolWindowFactory : ToolWindowFactory {
                     apiServer.startServer()
                     Timer(1000) {
                         SwingUtilities.invokeLater {
-                            updateServerUI(apiServer, portLabel, urlPanel, startButton, stopButton, ::updateServerStatusLabel)
+                            updateServerUI(
+                                apiServer, portLabel, urlPanel, startButton, stopButton, ::updateServerStatusLabel
+                            )
                         }
                     }.apply { isRepeats = false }.start()
                 }
@@ -300,13 +306,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                 }
 
                 // API Explorer dropdown and copy button moved here
-                val apiEndpoints = listOf(
-                    "GET /api/debugger/frame/{depth}",
-                    "GET /api/debugger/variables/{frameIndex}",
-                    "GET /api/debugger/call-stack",
-                    "POST /api/debugger/breakpoint",
-                    "GET /api/debugger/evaluate"
-                )
+                val apiEndpoints = DebuggerController.routes
 
                 val apiDropdown = JComboBox(apiEndpoints.toTypedArray()).apply {
                     background = Color(0x4C4C4C)
@@ -315,18 +315,133 @@ class MyToolWindowFactory : ToolWindowFactory {
                     border = BorderFactory.createEmptyBorder(4, 8, 4, 8)
                 }
 
-                val apiExplorerPanel = JPanel(BorderLayout(8, 0)).apply {
+                // Panel for dynamic param fields
+                val paramPanel = JPanel(FlowLayout(FlowLayout.LEFT, 0, 8)).apply {
+                    background = SECTION_BG
+                }
+
+                // Panel for request body (only for POST)
+                val bodyPanel = JPanel(FlowLayout(FlowLayout.LEFT, 8, 8)).apply {
+                    background = SECTION_BG
+                }
+
+                fun updateBodyFields(route: ApiRoute) {
+                    bodyPanel.removeAll()
+                    for (field in route.bodyFields) {
+                        bodyPanel.add(JLabel("${field.name}: ").apply { foreground = TEXT_COLOR })
+                        val defaultVal = field.defaultValue?.toString() ?: ""
+                        val input = JTextField(defaultVal, 12).apply {
+                            name = field.name
+                            background = Color(0x4C4C4C)
+                            foreground = TEXT_COLOR
+                        }
+
+                        bodyPanel.add(input)
+                    }
+                    bodyPanel.isVisible = route.bodyFields.isNotEmpty()
+                    bodyPanel.revalidate()
+                    bodyPanel.repaint()
+                }
+
+
+                // Update paramPanel fields based on selected endpoint
+                fun updateParamFields(route: ApiRoute) {
+                    paramPanel.removeAll()
+                    val params = route.params
+                    for (param in params) {
+                        paramPanel.add(JLabel("$param: ").apply { foreground = TEXT_COLOR })
+                        paramPanel.add(JTextField(8).apply {
+                            name = param
+                            background = Color(0x4C4C4C)
+                            foreground = TEXT_COLOR
+                        })
+                    }
+                    paramPanel.isVisible = params.isNotEmpty()
+                    paramPanel.revalidate()
+                    paramPanel.repaint()
+                }
+
+                apiDropdown.addActionListener {
+                    val route = apiDropdown.selectedItem as? ApiRoute ?: return@addActionListener
+                    updateParamFields(route)
+                    updateBodyFields(route)
+                }
+                // Initialize param fields for first endpoint
+                updateParamFields(apiEndpoints[0])
+
+                val runRequestButton = createStyledButton("▶ Run Request", GREEN_COLOR, "Run selected API request")
+                runRequestButton.addActionListener {
+                    val selected = apiDropdown.selectedItem as? ApiRoute ?: return@addActionListener
+                    val params = selected.params
+                    var endpoint = selected.path
+                    for (param in params) {
+                        val field = paramPanel.components.find { it is JTextField && it.name == param } as? JTextField
+                        val value = field?.text ?: ""
+                        endpoint = endpoint.replace("{$param}", value)
+                    }
+                    val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
+                    val fullUrl = "$baseUrl$endpoint"
+
+                    val method = selected.method
+                    Thread {
+                        try {
+                            val url = java.net.URL(fullUrl)
+                            val conn = url.openConnection() as java.net.HttpURLConnection
+                            conn.requestMethod = method
+                            conn.connectTimeout = 3000
+                            conn.readTimeout = 5000
+                            if (method == "POST") {
+                                conn.doOutput = true
+                                conn.setRequestProperty("Content-Type", "application/json")
+
+                                val bodyJson = buildString {
+                                    append("{")
+                                    selected.bodyFields.forEachIndexed { i, field ->
+                                        val fieldInput = bodyPanel.components.filterIsInstance<JTextField>()
+                                            .find { it.name == field.name }
+                                        val value = fieldInput?.text ?: field.defaultValue
+
+                                        val jsonValue = when {
+                                            value == null || (value is String && value.isEmpty()) -> null
+                                            field.type == FieldType.STRING -> "\"$value\""
+                                            field.type == FieldType.NUMBER -> value
+                                            field.type == FieldType.BOOLEAN -> (value as String?)?.lowercase()
+                                            else -> null
+                                        }
+
+                                        append("\"${field.name}\": $jsonValue")
+                                        if (i < selected.bodyFields.lastIndex) append(", ")
+                                    }
+                                    append("}")
+                                }
+
+                                conn.outputStream.use { it.write(bodyJson.toByteArray()) }
+                            }
+                            val response = conn.inputStream.bufferedReader().readText()
+                            SwingUtilities.invokeLater {
+                                appendLog("[Auto DBG] [$method] $fullUrl\n$response")
+                            }
+                        } catch (ex: Exception) {
+                            SwingUtilities.invokeLater {
+                                appendLog("[Auto DBG] Request failed: ${ex.message}")
+                            }
+                        }
+                    }.start()
+                }
+
+                val apiExplorerPanel = JPanel()
+                apiExplorerPanel.layout = BoxLayout(apiExplorerPanel, BoxLayout.Y_AXIS)
+                apiExplorerPanel.background = SECTION_BG
+                val apiDropdownPanel = JPanel(BorderLayout(8, 0)).apply {
                     background = SECTION_BG
                     add(apiDropdown, BorderLayout.CENTER)
-
                     val copyApiButton = createStyledButton("\uD83D\uDCC4 Copy", BLUE_COLOR, "Copy API endpoint")
                     copyApiButton.addActionListener {
-                        val selectedEndpoint = apiDropdown.selectedItem as? String
+                        val selectedEndpoint = apiDropdown.selectedItem?.toString()
                         if (selectedEndpoint != null) {
                             val baseUrl = apiServer.getServerUrl() ?: "http://localhost:8080"
-                            val endpoint = selectedEndpoint.substringAfter(" ") // Remove HTTP method
+                            val endpoint = selectedEndpoint.substringAfter(" ")
                             val fullUrl = "$baseUrl$endpoint"
-
                             val clipboard = Toolkit.getDefaultToolkit().systemClipboard
                             val selection = StringSelection(fullUrl)
                             clipboard.setContents(selection, selection)
@@ -336,14 +451,29 @@ class MyToolWindowFactory : ToolWindowFactory {
                     add(copyApiButton, BorderLayout.EAST)
                 }
 
+                // Hook dropdown selection
+                apiDropdown.addActionListener {
+                    val selected = apiDropdown.selectedItem as? ApiRoute ?: return@addActionListener
+                    updateParamFields(selected)
+                    updateBodyFields(selected)
+                }
+
+                apiExplorerPanel.add(apiDropdownPanel)
+                apiExplorerPanel.add(Box.createVerticalStrut(8))
+                apiExplorerPanel.add(paramPanel)
+                apiExplorerPanel.add(Box.createVerticalStrut(8))
+                apiExplorerPanel.add(bodyPanel)
+                apiExplorerPanel.add(Box.createVerticalStrut(8))
                 add(statusPanel)
                 add(Box.createVerticalStrut(8))
                 add(portPanel)
                 add(Box.createVerticalStrut(8))
                 add(urlPanel)
                 add(Box.createVerticalStrut(8))
-                add(apiExplorerPanel) // Added API explorer here
-                add(Box.createVerticalStrut(12))
+                add(apiExplorerPanel)
+                add(Box.createVerticalStrut(8))
+                serverButtonsPanel.add(Box.createHorizontalStrut(8))
+                serverButtonsPanel.add(runRequestButton)
                 add(serverButtonsPanel)
             }
 
@@ -475,8 +605,7 @@ class MyToolWindowFactory : ToolWindowFactory {
                         val scrollAmount = e.scrollAmount * e.wheelRotation * 16
                         val currentValue = verticalScrollBar.value
                         val newValue = (currentValue + scrollAmount).coerceIn(
-                            verticalScrollBar.minimum,
-                            verticalScrollBar.maximum - verticalScrollBar.visibleAmount
+                            verticalScrollBar.minimum, verticalScrollBar.maximum - verticalScrollBar.visibleAmount
                         )
                         verticalScrollBar.value = newValue
                         e.consume()
@@ -487,14 +616,24 @@ class MyToolWindowFactory : ToolWindowFactory {
             add(scrollPane, BorderLayout.CENTER)
 
             // Initialize UI state
-            updateServerUI(apiServer, portLabel, urlPanel,
-                         serverButtonsPanel.components[0] as JComponent,
-                         serverButtonsPanel.components[2] as JComponent, ::updateServerStatusLabel)
+            updateServerUI(
+                apiServer,
+                portLabel,
+                urlPanel,
+                serverButtonsPanel.components[0] as JComponent,
+                serverButtonsPanel.components[2] as JComponent,
+                ::updateServerStatusLabel
+            )
         }
 
-        private fun updateServerUI(apiServer: DebuggerApiServer, portLabel: JLabel,
-                                 urlPanel: JPanel, startButton: JComponent, stopButton: JComponent,
-                                 updateStatusLabel: (Boolean) -> Unit) {
+        private fun updateServerUI(
+            apiServer: DebuggerApiServer,
+            portLabel: JLabel,
+            urlPanel: JPanel,
+            startButton: JComponent,
+            stopButton: JComponent,
+            updateStatusLabel: (Boolean) -> Unit
+        ) {
             if (apiServer.isRunning()) {
                 // Update status using the callback function
                 updateStatusLabel(true)

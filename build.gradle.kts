@@ -56,6 +56,7 @@ dependencies {
 
         // Add test framework for Community Edition
         testFramework(TestFrameworkType.Platform)
+        testFramework(TestFrameworkType.Plugin.Java)
     }
 }
 

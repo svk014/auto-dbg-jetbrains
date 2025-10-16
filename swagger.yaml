@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: JetBrains Debugger API
   description: REST API for accessing JetBrains IDE debugger functionality
-  version: 0.1.0
+  version: 0.2.0
   contact:
     name: Auto DBG JetBrains Plugin
     url: https://github.com/svk014/auto-dbg-jetbrains
@@ -18,6 +18,7 @@ servers:
 paths:
   /api/debugger/frame/{depth}:
     get:
+      x-tool-name: frame_at_depth
       summary: Get frame information at specific depth
       description: Retrieves frame information from the call stack at the specified depth
       operationId: getFrame
@@ -66,6 +67,7 @@ paths:
 
   /api/debugger/variables/{frameIndex}:
     get:
+      x-tool-name: variables_for_frame
       summary: Get variables for a specific frame
       description: Retrieves all variables visible in the specified frame
       operationId: getVariables
@@ -102,36 +104,181 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
 
-  /api/debugger/call-stack:
-    get:
-      summary: Get the current call stack
-      description: Retrieves the complete call stack from the debugger
-      operationId: getCallStack
+  /api/debugger/evaluate:
+    post:
+      x-tool-name: evaluate_expression
+      summary: Evaluate an expression
+      description: Evaluates a code expression in the context of the specified frame
+      operationId: evaluateExpression
       tags:
-        - Frame Operations
+        - Expression Operations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expression:
+                  type: string
+                  description: The expression to evaluate
+                  example: "count + 1"
+                frameIndex:
+                  type: integer
+                  description: The frame index in which to evaluate the expression
+                  default: 0
+                  example: 0
       responses:
         '200':
-          description: Call stack retrieved successfully
+          description: Expression evaluated successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
               examples:
                 success:
-                  summary: Successful call stack retrieval
+                  summary: Successful evaluation
                   value:
                     success: true
                     data:
-                      - methodName: "calculateSum"
-                        lineNumber: 42
-                        filePath: "/src/main/java/com/example/Calculator.java"
-                      - methodName: "processData"
-                        lineNumber: 128
-                        filePath: "/src/main/java/com/example/DataProcessor.java"
+                      result: 42
+                      expression: "count + 1"
                     error: null
                     timestamp: 1722556800000
-        '500':
-          description: Internal server error
+        '400':
+          description: Bad request - invalid expression
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/trace_breakpoint:
+    post:
+      x-tool-name: trace_breakpoint
+      summary: Automated Breakpoint Tracing for Program Analysis
+      description: |
+        **Advanced automated debugging tool for non-intrusive program analysis.**
+        
+        This API enables sophisticated debugging workflows by automatically:
+        
+        **Core Capabilities:**
+        - Sets a temporary breakpoint at the specified file and line
+        - Automatically captures program execution when the breakpoint is hit
+        - Evaluates custom expressions in the context of each breakpoint hit
+        - Collects structured execution traces across multiple hits
+        - Manages breakpoint lifecycle (setup, monitoring, cleanup)
+        
+        **Automated Workflow:**
+        1. Temporarily disables user breakpoints to prevent interference
+        2. Sets a breakpoint at the target location
+        3. Monitors program execution and waits for breakpoint hits
+        4. Evaluates the provided expression each time the breakpoint triggers
+        5. Collects trace data showing how values change over time
+        6. Automatically removes the temporary breakpoint
+        7. Restores user breakpoints to their original state
+        
+        **Use Cases for Automated Debugging:**
+        - **Variable Tracking**: Monitor how variables change across loop iterations
+        - **Condition Analysis**: Track when specific conditions become true/false
+        - **Performance Profiling**: Count executions or measure timing
+        - **Bug Reproduction**: Automatically collect data when certain code paths execute
+        - **Regression Testing**: Verify consistent behavior across code changes
+        - **AI-Assisted Debugging**: Gather systematic program state data for analysis
+        
+        **Non-Intrusive Design:**
+        - Operates without modifying source code
+        - Preserves existing debugging session state
+        - Handles timeout scenarios gracefully
+        - Provides structured output for programmatic analysis
+        
+        **Example Scenario:**
+        To track how a counter variable changes in a loop, set the breakpoint inside the loop
+        and use expression "counter + index" to see the progression across iterations.
+      operationId: traceBreakpoint
+      tags:
+        - Breakpoint Operations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file
+                - line
+                - expression
+              properties:
+                file:
+                  type: string
+                  description: The full file path where to set the breakpoint
+                  example: "/Users/user1/Documents/personal/SomeJavaProject/src/main/java/com/example/Calculator.java"
+                line:
+                  type: integer
+                  description: The line number where to set the breakpoint (1-based)
+                  minimum: 1
+                  example: 42
+                breakpointType:
+                  type: string
+                  description: The type of breakpoint to set
+                  default: "LINE"
+                  example: "LINE"
+                lambdaOrdinal:
+                  type: integer
+                  description: Optional lambda ordinal for breakpoints within lambda expressions
+                  minimum: 0
+                  example: 0
+                expression:
+                  type: string
+                  description: |
+                    The expression to evaluate at each breakpoint hit. Can access local variables,
+                    method parameters, and object fields visible at the breakpoint location.
+                    Examples: "count", "arr.length", "x + y", "user.getName()"
+                  example: "count + 1"
+                maxHits:
+                  type: integer
+                  description: Maximum number of breakpoint hits to trace before stopping
+                  default: 10
+                  minimum: 1
+                  maximum: 100
+                  example: 10
+                timeoutMs:
+                  type: integer
+                  description: Timeout in milliseconds to wait for each breakpoint hit
+                  default: 30000
+                  minimum: 1000
+                  maximum: 300000
+                  example: 30000
+      responses:
+        '200':
+          description: Trace completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Trace completed
+                  value:
+                    success: true
+                    data:
+                      hits: 3
+                      traces:
+                        - hitNumber: 1
+                          location: "/src/main/java/com/example/Calculator.java:42"
+                          frameIndex: 0
+                          expressionResult: 43
+                        - hitNumber: 2
+                          location: "/src/main/java/com/example/Calculator.java:42"
+                          frameIndex: 0
+                          expressionResult: 44
+                        - hitNumber: 3
+                          location: "/src/main/java/com/example/Calculator.java:42"
+                          frameIndex: 0
+                          expressionResult: 45
+                      breakpointRemoved: true
+                    error: null
+        '400':
+          description: Bad request - invalid parameters
           content:
             application/json:
               schema:
@@ -139,27 +286,67 @@ paths:
 
   /api/debugger/breakpoint:
     post:
-      summary: Set a breakpoint
-      description: Sets a breakpoint at the specified file and line number
+      x-tool-name: set_breakpoint
+      summary: Set a breakpoint at a specific location
+      description: |
+        Sets a breakpoint at the specified file and line number for debugging purposes.
+        
+        **Set Breakpoint Behavior:**
+        - Creates a new breakpoint at the specified location
+        - Breakpoint will pause execution when the line is reached
+        - Supports different breakpoint types (LINE, METHOD, etc.)
+        - Breakpoint persists until manually removed or session ends
+        - Multiple breakpoints can be set simultaneously
+        
+        **Use Cases:**
+        - Pause execution at specific lines for debugging
+        - Set breakpoints with different types for various debugging scenarios
+        - Create multiple breakpoints for complex debugging workflows
+        - Set breakpoints programmatically for automated debugging
+        
+        **Requirements:**
+        - Valid source file path that exists in the current project
+        - Line number must be a valid executable line in the source file
+        - Debugger session must be active (though execution can be running or paused)
+        
+        **Breakpoint Management:**
+        - Each breakpoint is identified by its file path, line number, and type
+        - Setting a breakpoint at an existing location will update the existing breakpoint
+        - Breakpoints remain active across debug session pauses and resumes
+        - Use the remove endpoint to clean up breakpoints when no longer needed
       operationId: setBreakpoint
       tags:
         - Breakpoint Operations
-      parameters:
-        - name: file
-          in: query
-          required: true
-          description: The file path where to set the breakpoint
-          schema:
-            type: string
-            example: "/src/main/java/com/example/Calculator.java"
-        - name: line
-          in: query
-          required: true
-          description: The line number where to set the breakpoint
-          schema:
-            type: integer
-            minimum: 1
-            example: 42
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - file
+                - line
+                - breakpointType
+              properties:
+                file:
+                  type: string
+                  description: The full file path where to set the breakpoint
+                  example: "/Users/user1/Documents/personal/SomeJavaProject/src/main/java/com/example/Calculator.java"
+                line:
+                  type: integer
+                  description: The line number where to set the breakpoint (1-based)
+                  minimum: 1
+                  example: 42
+                breakpointType:
+                  type: string
+                  description: The type of breakpoint to set
+                  default: "LINE"
+                  example: "LINE"
+                lambdaOrdinal:
+                  type: integer
+                  description: Optional lambda ordinal for breakpoints within lambda expressions
+                  minimum: 0
+                  example: 0
       responses:
         '200':
           description: Breakpoint set successfully
@@ -169,75 +356,340 @@ paths:
                 $ref: '#/components/schemas/ApiResponse'
               examples:
                 success:
-                  summary: Successful breakpoint creation
+                  summary: Breakpoint set successfully
                   value:
                     success: true
                     data:
-                      success: true
-                      filePath: "/src/main/java/com/example/Calculator.java"
-                      lineNumber: 42
-                      condition: null
-                      message: "Breakpoint set successfully"
+                      message: "Breakpoint set at /src/main/java/com/example/Calculator.java:42"
                     error: null
                     timestamp: 1722556800000
         '400':
-          description: Bad request - invalid parameters
+          description: Bad request - invalid parameters or location
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
               examples:
-                missing_params:
-                  summary: Missing required parameters
+                invalid_file:
+                  summary: Invalid file path
                   value:
                     success: false
                     data: null
-                    error: "File parameter is required"
+                    error: "Failed to set breakpoint: File does not exist"
                     timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
 
-  /api/debugger/evaluate:
+  /api/debugger/state:
     get:
-      summary: Evaluate an expression
-      description: Evaluates a code expression in the context of the specified frame
-      operationId: evaluateExpression
+      x-tool-name: debugger_state
+      summary: Get current debugger state
+      description: Retrieves the current state of the debugger including connection status, session information, and current position if paused
+      operationId: getDebuggerState
       tags:
-        - Expression Operations
-      parameters:
-        - name: expression
-          in: query
-          required: true
-          description: The expression to evaluate
-          schema:
-            type: string
-            example: "count + 1"
-        - name: frameIndex
-          in: query
-          required: false
-          description: The frame index in which to evaluate the expression
-          schema:
-            type: integer
-            minimum: 0
-            default: 0
-            example: 0
+        - Debugger State
       responses:
         '200':
-          description: Expression evaluated successfully
+          description: Debugger state retrieved successfully
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
               examples:
-                not_implemented:
-                  summary: Feature not yet implemented
+                paused:
+                  summary: Debugger paused at breakpoint
                   value:
                     success: true
                     data:
-                      result: "Expression evaluation not yet implemented"
-                      expression: "count + 1"
+                      status: "PAUSED"
+                      sessionName: "Main"
+                      currentPosition:
+                        methodName: "calculateSum"
+                        lineNumber: 42
+                        filePath: "/src/main/java/com/example/Calculator.java"
+                        className: "com.example.Calculator"
+                      isConnected: true
+                      availableSessions: ["Main"]
+                    error: null
+                    timestamp: 1722556800000
+                running:
+                  summary: Debugger running
+                  value:
+                    success: true
+                    data:
+                      status: "RUNNING"
+                      sessionName: "Main"
+                      currentPosition: null
+                      isConnected: true
+                      availableSessions: ["Main"]
+                    error: null
+                    timestamp: 1722556800000
+                not_connected:
+                  summary: No debugger session connected
+                  value:
+                    success: true
+                    data:
+                      status: "NOT_CONNECTED"
+                      sessionName: null
+                      currentPosition: null
+                      isConnected: false
+                      availableSessions: ["Main", "Test Session"]
+                    error: null
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/step/over:
+    post:
+      x-tool-name: step_over_exec
+      summary: Step over the current line
+      description: |
+        Executes the current line and pauses at the next line in the same method or the calling method.
+        
+        **Step Over Behavior:**
+        - If the current line contains a method call, the entire method is executed without stepping into it
+        - Execution pauses at the next line in the current method
+        - If the current line is the last line of a method, execution pauses at the calling method
+        - Maintains the current debugging context and variable scope
+        
+        **Use Cases:**
+        - Skip over method calls you don't want to debug
+        - Move through code line by line within the current method
+        - Quickly execute utility or library method calls
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused (at a breakpoint or after a previous step)
+        
+        This operation resumes execution temporarily and will pause again at the next appropriate line.
+      operationId: stepOver
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Step over command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Step over completed
+                  value:
+                    success: true
+                    data:
+                      message: "Step over executed successfully"
+                      action: "STEP_OVER"
                     error: null
                     timestamp: 1722556800000
         '400':
-          description: Bad request - invalid expression
+          description: Bad request - debugger not in valid state for stepping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                not_paused:
+                  summary: Debugger not paused
+                  value:
+                    success: false
+                    data: null
+                    error: "Cannot step over: debugger is not paused"
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/step/into:
+    post:
+      x-tool-name: step_into_exec
+      summary: Step into the current line
+      description: |
+        Steps into method calls on the current line, allowing detailed debugging of called methods.
+        
+        **Step Into Behavior:**
+        - If the current line contains a method call, execution pauses at the first line of the called method
+        - If the current line doesn't contain method calls, behaves like step over
+        - Allows debugging of nested method calls and constructor calls
+        - Preserves full call stack context for navigation
+        
+        **Use Cases:**
+        - Debug the implementation of a specific method call
+        - Trace execution flow through multiple method layers
+        - Investigate issues within called methods
+        - Understand complex object initialization or constructor behavior
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused
+        - Source code must be available for the method being stepped into
+        
+        This operation is essential for deep debugging and understanding code execution flow.
+      operationId: stepInto
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Step into command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Step into completed
+                  value:
+                    success: true
+                    data:
+                      message: "Step into executed successfully"
+                      action: "STEP_INTO"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for stepping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/step/out:
+    post:
+      x-tool-name: step_out_exec
+      summary: Step out of the current method
+      description: |
+        Completes execution of the current method and pauses at the calling method.
+        
+        **Step Out Behavior:**
+        - Executes all remaining lines in the current method
+        - Pauses at the line in the calling method that made the method call
+        - Returns to the previous level in the call stack
+        - Useful for quickly exiting from deep method calls
+        
+        **Use Cases:**
+        - Exit from a method you've finished debugging
+        - Return to a higher level in the call stack
+        - Skip the remaining execution of a long method
+        - Navigate back to the calling context after investigating a method
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused
+        - Must not be at the top level of the call stack
+        
+        If already at the main method or top-level, this may continue execution until the next breakpoint.
+      operationId: stepOut
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Step out command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Step out completed
+                  value:
+                    success: true
+                    data:
+                      message: "Step out executed successfully"
+                      action: "STEP_OUT"
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for stepping
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+
+  /api/debugger/continueExecution:
+    post:
+      x-tool-name: continue_execution
+      summary: Continue program execution
+      description: |
+        Resumes program execution from the current paused state until the next breakpoint or program termination.
+        
+        **Continue Execution Behavior:**
+        - Resumes normal program flow from the current position
+        - Execution continues until it hits another breakpoint, encounters an exception, or the program terminates
+        - All active breakpoints remain enabled and functional
+        - Variables and program state continue to change during execution
+        
+        **Use Cases:**
+        - Resume normal program flow after examining variables or call stack
+        - Continue to the next breakpoint in the execution path
+        - Complete program execution after debugging specific sections
+        - Test program behavior with current variable states
+        
+        **Important Notes:**
+        - After continuing, the debugger state will change to "RUNNING" until the next pause
+        - If no more breakpoints are hit, the program may complete execution
+        - Any breakpoints set in the execution path will still trigger
+        - Use the `/api/debugger/state` endpoint to check if execution has paused again
+        
+        **Requirements:**
+        - Debugger must be connected to a session
+        - Execution must be currently paused
+      operationId: continueExecution
+      tags:
+        - Execution Control
+      responses:
+        '200':
+          description: Continue command executed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                success:
+                  summary: Continue execution started
+                  value:
+                    success: true
+                    data:
+                      stepped: true
+                    error: null
+                    timestamp: 1722556800000
+        '400':
+          description: Bad request - debugger not in valid state for continuing
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+              examples:
+                not_paused:
+                  summary: Debugger not paused
+                  value:
+                    success: false
+                    data: null
+                    error: "Failed to continueExecution: debugger is not paused"
+                    timestamp: 1722556800000
+        '500':
+          description: Internal server error
           content:
             application/json:
               schema:
@@ -279,27 +731,6 @@ components:
               nullable: true
               allOf:
                 - $ref: '#/components/schemas/FrameInfo'
-
-    CallStackResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          properties:
-            data:
-              nullable: true
-              type: array
-              items:
-                $ref: '#/components/schemas/FrameInfo'
-
-    BreakpointResponse:
-      allOf:
-        - $ref: '#/components/schemas/ApiResponse'
-        - type: object
-          properties:
-            data:
-              nullable: true
-              allOf:
-                - $ref: '#/components/schemas/BreakpointInfo'
 
     VariablesResponse:
       allOf:
@@ -378,7 +809,7 @@ components:
           example: true
         message:
           type: string
-          description: Description of the operation result
+          description: Description of the operation
           example: "Operation completed successfully"
         details:
           type: object
@@ -396,3 +827,7 @@ tags:
     description: Operations for managing breakpoints
   - name: Expression Operations
     description: Operations for evaluating expressions
+  - name: Debugger State
+    description: Operations for retrieving the debugger's current state
+  - name: Execution Control
+    description: Operations for controlling program execution (step over, step into, etc.)

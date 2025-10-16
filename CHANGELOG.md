@@ -1,6 +1,6 @@
 <!-- Keep a Changelog guide -> https://keepachangelog.com -->
 
-# auto-dbg-jetbrains Changelog
+# auto-dbg Changelog
 
 ## [Unreleased]
 ### Added

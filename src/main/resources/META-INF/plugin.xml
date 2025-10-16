@@ -1,16 +1,23 @@
 <!-- Plugin Configuration File. Read more: https://plugins.jetbrains.com/docs/intellij/plugin-configuration-file.html -->
 <idea-plugin>
     <id>com.github.svk014.autodbgjetbrains</id>
-    <name>auto-dbg-jetbrains</name>
+    <name>Auto-Dbg</name>
     <vendor>svk014</vendor>
 
     <depends>com.intellij.modules.platform</depends>
-    <depends option="true">com.intellij.java</depends>
+    <depends>com.intellij.java</depends>
 
     <resource-bundle>messages.MyBundle</resource-bundle>
 
     <extensions defaultExtensionNs="com.intellij">
         <toolWindow factoryClass="com.github.svk014.autodbgjetbrains.toolWindow.MyToolWindowFactory" id="Auto DBG"/>
-        <projectService serviceImplementation="com.github.svk014.autodbgjetbrains.debugger.DebuggerIntegrationService"/>
     </extensions>
+
+
+    <actions>
+        <action id="RunAutoDebuggerAction" text="Run Auto Debugger"
+                class="com.github.svk014.autodbgjetbrains.actions.RunAutoDebuggerAction">
+            <add-to-group group-id="MainToolbarRight" anchor="first"/>
+        </action>
+    </actions>
 </idea-plugin>
